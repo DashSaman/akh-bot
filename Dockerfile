@@ -1,7 +1,9 @@
 # akh-bot — lightweight modular monolith (internal namespace: akhbot)
 FROM python:3.12-slim AS base
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
+ARG GIT_SHA=unknown
+ENV AKHBOT_GIT_SHA=${GIT_SHA} \
+    PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 

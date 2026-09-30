@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # akh-bot deployment on the Hetzner host (uses docker run: host has no compose plugin).
 # Safe-by-design: creates only akhbot-* resources; never touches other projects.
-# Usage: sudo bash scripts/deploy.sh   (run from the repo checkout at /opt/akhbot/app)
+# Usage:
+#   bash scripts/deploy.sh                 # full deploy (build + run)
+#   bash scripts/deploy.sh --prepare-only  # only ensure config/brand.yml exists (tests/CI)
 set -euo pipefail
 
 APP_DIR="${AKH_DIR:-/opt/akhbot}"
@@ -13,9 +15,22 @@ VOL="akhbot_data"
 cd "$APP_DIR/app"
 
 [ -f "$APP_DIR/.env" ] || { echo "missing $APP_DIR/.env (copy .env.example)"; exit 1; }
-cp -f config/brand.example.yml config/brand.yml 2>/dev/null || true
 
-docker build -t "$IMAGE" .
+# Brand config is OWNER data: create once, NEVER overwrite on later deploys.
+if [ ! -f config/brand.yml ]; then
+  cp config/brand.example.yml config/brand.yml
+  echo "created config/brand.yml from example"
+else
+  echo "preserved existing config/brand.yml"
+fi
+
+if [ "${1:-}" = "--prepare-only" ]; then
+  echo "prepare-only: done"
+  exit 0
+fi
+
+GIT_SHA=$(git rev-parse --short HEAD)
+docker build --build-arg GIT_SHA="$GIT_SHA" -t "$IMAGE" .
 
 docker network inspect "$NET" >/dev/null 2>&1 || docker network create "$NET"
 
