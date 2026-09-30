@@ -27,14 +27,11 @@ STATUS_ICONS = {
 
 
 def brand_signature(brand: Any, enabled: bool = True) -> str:
+    """Public footer = ONLY our own configured handle (no brand word, no sources)."""
     if not enabled:
         return ""
-    lines = []
-    if getattr(brand, "telegram_handle", ""):
-        lines.append(f"🆔 @{brand.telegram_handle}")
-    if getattr(brand, "name_fa", ""):
-        lines.append(str(brand.name_fa))
-    return "\n".join(lines)
+    handle = getattr(brand, "telegram_handle", "")
+    return f"🆔 @{handle}" if handle else ""
 
 
 def sanitize_public_copy(text: str, mode: str = "hidden", brand: Any = None) -> str:
