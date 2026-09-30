@@ -1,0 +1,32 @@
+# Portable compose file. NOTE: the production Hetzner host currently has no compose
+# plugin, so scripts/deploy.sh uses `docker run` with equivalent flags.
+name: akhbot
+
+services:
+  app:
+    build: .
+    image: akhbot-app:latest
+    container_name: akhbot-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /data
+    ports:
+      - "127.0.0.1:8307:8000"   # localhost-only bind; expose later via existing reverse proxy
+    volumes:
+      - akhbot_data:/data
+    networks:
+      - akhbot_internal
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # no hard memory limit by default — measure first (docs/RESOURCE-BASELINE.md)
+
+volumes:
+  akhbot_data:
+
+networks:
+  akhbot_internal:
+    name: akhbot_internal
