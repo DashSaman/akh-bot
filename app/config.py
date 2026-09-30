@@ -27,8 +27,14 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 90.0
 
     telegram_bot_token: str = ""
-    telegram_staging_chat_id: str = ""
-    telegram_news_chat_id: str = ""   # production channel (e.g. @RastehNews); falls back to staging
+    telegram_publish_chat_id: str = ""  # REAL public news channel (type=channel, validated)
+    telegram_staging_chat_id: str = ""   # optional staging/test chat
+    telegram_admin_chat_id: str = ""     # optional owner alerts chat
+    telegram_news_chat_id: str = ""      # legacy alias → publish (being retired)
+
+    max_provisional_posts_per_hour: int = 6
+    max_confirmed_posts_per_hour: int = 12
+    min_breaking_importance: int = 60    # 0..100; below → no provisional publication
     telegram_ingest_api_id: int = 0
     telegram_ingest_api_hash: str = ""
     telegram_ingest_session: str = ""
@@ -54,8 +60,14 @@ class Settings(BaseSettings):
         return bool(self.glm_api_key)
 
     @property
+    def telegram_publish_target(self) -> str:
+        """PUBLIC news goes ONLY to the validated publish channel.
+        No silent fallback to staging/private chats — an empty target blocks publishing."""
+        return self.telegram_publish_chat_id or self.telegram_news_chat_id
+
+    @property
     def telegram_publish_ready(self) -> bool:
-        return bool(self.telegram_bot_token and self.telegram_staging_chat_id)
+        return bool(self.telegram_bot_token and self.telegram_publish_target)
 
     @property
     def telegram_ingest_ready(self) -> bool:

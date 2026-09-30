@@ -66,21 +66,53 @@ def make_publish_handler(db: Database, settings: Settings,
         payload_hash = str(payload["payload_hash"])
         if app_settings.is_paused(platform):
             log.info("publish skipped: paused (%s)", platform, extra={"platform": platform})
-            return True  # not a failure; re-run later manually or after unpause via admin
-        if pubs.already_sent(story_id, platform, payload_hash):
             return True
-        now = datetime.now(timezone.utc)
-        if pubs.sent_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
-            return False  # rate limited: retry later
-        if pubs.sent_since(now - timedelta(hours=24)) >= settings.max_posts_per_day:
-            return False
         story = stories.get(story_id)
         if not story:
-            return True  # story vanished; nothing to do
-        pub_id = pubs.upsert(story_id, platform, payload_hash, int(story["version"]))
+            return True
+
+        # lifecycle-aware rate caps (provisional stories are noisier)
+        lifecycle = story.get("lifecycle") or "CONFIRMED"
+        cap = (getattr(settings, "max_provisional_posts_per_hour", 6)
+               if lifecycle == "PROVISIONAL"
+               else getattr(settings, "max_confirmed_posts_per_hour", 12))
+        now = datetime.now(timezone.utc)
+        if pubs.sent_since(now - timedelta(hours=1)) >= cap:
+            return False
+
+        if pubs.already_sent(story_id, platform, payload_hash):
+            return True
+
+        # same-message edit policy: a SENT row for this story on this platform
+        # IN THE CURRENT PUBLISH CHAT means updates must EDIT that message,
+        # never post a duplicate. Rows in a different chat (e.g. misdirected
+        # private-chat deliveries) are historical only.
+        current_chat = getattr(settings, "telegram_publish_target", "") if platform == "telegram" else ""
+        prior = db.query_one(
+            "SELECT * FROM publications WHERE story_id=? AND platform=? AND status='SENT' "
+            "ORDER BY id DESC LIMIT 1", (story_id, platform))
+        if prior and prior.get("remote_id") and (
+                not current_chat or not prior.get("chat_id") or prior["chat_id"] == str(current_chat)):
+            publisher = telegram_publisher_factory()
+            result = await publisher.edit_message(prior["remote_id"], payload.get("text") or "")
+            pub_id = pubs.upsert(story_id, platform, payload_hash, int(story["version"]))
+            db.execute("UPDATE publications SET chat_id=? WHERE id=?", (str(publisher.chat_id), pub_id))
+            if result["ok"]:
+                pubs.mark(pub_id, "SENT", remote_id=str(prior["remote_id"]))
+                stories.mark_published(story_id)
+                return True
+            pubs.mark(pub_id, "FAILED", error=result.get("error"))
+            return False
+
+        if pubs.sent_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
+            return False
+        if pubs.sent_since(now - timedelta(hours=24)) >= settings.max_posts_per_day:
+            return False
         text = payload.get("text") or ""
         publisher = telegram_publisher_factory()
         result = await publisher.send_message(text)
+        pub_id = pubs.upsert(story_id, platform, payload_hash, int(story["version"]))
+        db.execute("UPDATE publications SET chat_id=? WHERE id=?", (str(publisher.chat_id), pub_id))
         if result["ok"]:
             pubs.mark(pub_id, "SENT", remote_id=str(result.get("message_id", "")))
             stories.mark_published(story_id)

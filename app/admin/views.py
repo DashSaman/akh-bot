@@ -280,6 +280,51 @@ async def publications_page(request: Request):
     return templates.TemplateResponse(request, "admin/publications.html", _ctx(request, pubs=rows))
 
 
+@router.post("/stories/{story_id}/lifecycle")
+async def story_lifecycle(request: Request, story_id: int, lifecycle: str = Form(...),
+                          note: str = Form(""), csrf: str = Form("")):
+    """Manual editorial override: CONFIRM / HOLD(VERIFYING) / RETRACT / REPUBLISH.
+    Re-publication reuses the SAME Telegram message via the ledger edit path."""
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    allowed = {"CONFIRM", "PROVISIONAL", "VERIFYING", "RETRACT", "CONFLICTING"}
+    if lifecycle not in allowed:
+        return HTMLResponse("چرخه زندگی نامعتبر", status_code=400)
+    target = "RETRACTED" if lifecycle == "RETRACT" else lifecycle
+    db = _db(request)
+    repo = StoriesRepo(db)
+    story = repo.get(story_id)
+    if not story:
+        return RedirectResponse("/admin/events", status_code=303)
+    import json as _json
+
+    draft = _json.loads(story["draft_json"])
+    # rebuild public telegram text with the new status header (own-brand signature,
+    # external sources hidden — evidence stays in the DB)
+    from app.publishing.telegram_bot import build_public_text
+    from app.core.textnorm import sha256_hex
+    from app.db.repo import JobsRepo, PublicationsRepo
+
+    body = draft.get("platform_variants", {}).get("telegram") or draft.get("lead", "")
+    body = body.split("\n", 1)[1] if body.startswith(("🔴", "✅", "🟠", "❌", "📢", "⚠️")) else body
+    settings_repo = SettingsRepo(db)
+    mode = settings_repo.get("public_source_display_mode", "hidden")
+    sig_on = settings_repo.get("telegram_signature_enabled", "1") == "1"
+    text = build_public_text(target, body, request.app.state.brand, mode, sig_on)
+    draft.setdefault("platform_variants", {})["telegram"] = text
+    draft["lifecycle_note"] = f"manual:{lifecycle}"
+    version = repo.set_lifecycle(story_id, target, note or f"manual {lifecycle}", draft)
+    payload_hash = sha256_hex(text)
+    pub_id = PublicationsRepo(db).upsert(story_id, "telegram", payload_hash, version)
+    JobsRepo(db).enqueue("publish_telegram",
+                         {"story_id": story_id, "platform": "telegram",
+                          "payload_hash": payload_hash, "text": text,
+                          "publication_id": pub_id},
+                         dedupe_key=f"pub:tg:{story_id}:{payload_hash[:16]}")
+    event = db.query_one("SELECT id FROM events WHERE id=?", (story["event_id"],))
+    return RedirectResponse(f"/admin/events/{event['id']}", status_code=303)
+
+
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     if (r := await require_login(request)):

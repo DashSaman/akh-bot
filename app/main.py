@@ -57,7 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     db, settings,
                     lambda: TelegramBotPublisher(
                         settings.telegram_bot_token,
-                        settings.telegram_news_chat_id or settings.telegram_staging_chat_id,
+                        settings.telegram_publish_target,  # validated channel ONLY — no fallback
                     ),
                 ),
             )

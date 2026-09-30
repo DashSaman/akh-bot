@@ -1,0 +1,7 @@
+-- Telegram destination separation + breaking-news lifecycle.
+ALTER TABLE sources ADD COLUMN breaking_source INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE stories ADD COLUMN lifecycle TEXT NOT NULL DEFAULT 'DETECTED'
+  CHECK (lifecycle IN ('DETECTED','VERIFYING','PROVISIONAL','CONFIRMED','CONFLICTING','DISPUTED','RETRACTED','ARCHIVED'));
+UPDATE stories SET lifecycle='CONFIRMED' WHERE status IN ('PUBLISHED','CORRECTED');
+ALTER TABLE publications ADD COLUMN chat_id TEXT;
+ALTER TABLE publications ADD COLUMN story_version INTEGER NOT NULL DEFAULT 1;

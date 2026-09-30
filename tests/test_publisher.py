@@ -137,6 +137,9 @@ async def test_rate_limit_blocks_excess(db):
 
     handler = _handler_for(db, Tight(), httpx.MockTransport(_ok_send))
     p1 = {"story_id": story_id, "platform": "telegram", "payload_hash": sha256_hex("a"), "text": "x"}
-    p2 = {"story_id": story_id, "platform": "telegram", "payload_hash": sha256_hex("b"), "text": "y"}
     assert await handler(p1) is True
+    # same story + different payload now EDITS the prior message (lifecycle policy),
+    # so the hourly cap is exercised with a SECOND story:
+    story2 = _story(db)
+    p2 = {"story_id": story2, "platform": "telegram", "payload_hash": sha256_hex("b"), "text": "y"}
     assert await handler(p2) is False  # hourly cap reached → retried later, not dropped

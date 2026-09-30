@@ -368,6 +368,34 @@ class StoriesRepo:
             (status, utcnow(), utcnow(), story_id),
         )
 
+    def set_lifecycle(self, story_id: int, lifecycle: str, note: str = "",
+                      new_draft: dict | None = None) -> int:
+        """Breaking-news lifecycle transition + audited version snapshot."""
+        allowed = ("DETECTED", "VERIFYING", "PROVISIONAL", "CONFIRMED", "CONFLICTING",
+                   "DISPUTED", "RETRACTED", "ARCHIVED")
+        assert lifecycle in allowed
+        story = self.get(story_id)
+        if not story:
+            raise ValueError("story not found")
+        import json as _json
+
+        version = int(story["version"]) + 1
+        status_map = {"PROVISIONAL": "PUBLISHED", "CONFIRMED": "PUBLISHED",
+                      "CONFIRMED_OFFICIAL": "PUBLISHED", "CONFLICTING": "PUBLISHED",
+                      "RETRACTED": "CORRECTED", "DISPUTED": "HELD",
+                      "VERIFYING": "HELD", "DETECTED": "DRAFT", "ARCHIVED": "HELD"}
+        draft = new_draft if new_draft is not None else _json.loads(story["draft_json"])
+        self.db.execute(
+            "UPDATE stories SET lifecycle=?, status=?, version=?, draft_json=?, updated_at=? WHERE id=?",
+            (lifecycle, status_map.get(lifecycle, "PUBLISHED"), version,
+             _json.dumps(draft, ensure_ascii=False), utcnow(), story_id))
+        self.db.execute(
+            "INSERT OR IGNORE INTO story_versions(story_id,version,snapshot_json,change_note,created_at)"
+            " VALUES(?,?,?,?,?)",
+            (story_id, version, _json.dumps(draft, ensure_ascii=False),
+             f"lifecycle->{lifecycle}" + (f": {note}" if note else ""), utcnow()))
+        return version
+
 
 class PublicationsRepo:
     def __init__(self, db: Database) -> None:
