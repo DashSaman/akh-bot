@@ -3,8 +3,8 @@
 # وضعیت جاری پروژه (منبع حقیقت برای نشست‌های بعدی)
 
 - **فاز:** ۳ تا ۹ + استقرار + تست E2E مرورگری کامل + چرخش اعتبارنامه مدیر
-- **آخرین کامیت مخزن:** به `git log -1` مراجعه شود (این سند با هر چرخه به‌روز می‌شود)
-- **کامیت مستقرشده روی سرور:** در بخش English همین فایل — پس از هر deploy مقایسه شود
+- **آخرین کامیت مخزن:** `a73ec0d` (تأییدشده 2026-09-30)
+- **کامیت مستقرشده روی سرور:** `a73ec0d` (یکسان — تأیید در POST-DEPLOY-CHECK.md)
 - **مسیر سرور:** `/opt/akhbot/` (اپ: `/opt/akhbot/app`، env: `/opt/akhbot/.env`)
 - **پورت:** `127.0.0.1:8307` روی سرور — دسترسی توسعه با تونل SSH (پورت محلی 18307)
 - **پروژه داکر:** کانتینر `akhbot-app`، شبکه `akhbot_internal`، والیوم `akhbot_data`
@@ -31,7 +31,7 @@
 # Current Status (source of truth for future sessions)
 
 - **Phase:** 3–9 + deployment + full browser E2E + admin credential rotation
-- **Latest commit / deployed commit:** compare `git log -1` locally with
+- **Latest commit:** `a73ec0d` · **Deployed commit:** `a73ec0d` (identical, verified 2026-09-30). Compare `git log -1` locally with
   `cd /opt/akhbot/app && git rev-parse HEAD` on the server — this file is updated per
   cycle; POST-DEPLOY-CHECK.md records the verified pair.
 - **Server path:** `/opt/akhbot/` (app `/opt/akhbot/app`, env `/opt/akhbot/.env`)
