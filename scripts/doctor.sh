@@ -52,10 +52,12 @@ print('PAUSED' if v and v[0]=='1' else 'ACTIVE')
 " 2>/dev/null || echo "?")
 line "publishing pause" "$PAUSE"
 
-GLM_SET=$(grep -cE '^GLM_API_KEY=.+' /opt/akhbot/.env 2>/dev/null || echo 0)
-TG_SET=$(grep -cE '^TELEGRAM_BOT_TOKEN=.+|^TELEGRAM_STAGING_CHAT_ID=.+' /opt/akhbot/.env 2>/dev/null || echo 0)
-line "GLM key in .env" "$([ "$GLM_SET" -ge 1 ] && echo YES || echo NO)"
-line "Telegram pub creds in .env" "$([ "$TG_SET" -ge 2 ] && echo YES || echo NO)"
+GLM_SET=$(grep -cE '^GLM_API_KEY=.+' /opt/akhbot/.env 2>/dev/null || true)
+GLM_SET=${GLM_SET:-0}
+TG_SET=$(grep -cE '^TELEGRAM_BOT_TOKEN=.+' /opt/akhbot/.env 2>/dev/null || true)
+TG_TOT=$(grep -cE '^TELEGRAM_STAGING_CHAT_ID=.+' /opt/akhbot/.env 2>/dev/null || true)
+line "GLM key in .env" "$([ "${GLM_SET:-0}" -ge 1 ] && echo YES || echo NO)"
+line "Telegram pub creds in .env" "$([ "${TG_SET:-0}" -ge 1 ] && [ "${TG_TOT:-0}" -ge 1 ] && echo YES || echo NO)"
 line "public base URL" "$(grep -E '^PUBLIC_BASE_URL=.+' /opt/akhbot/.env | sed 's/PUBLIC_BASE_URL=//' | grep . || echo '(empty → preview/noindex)')"
 
 if [ "${1:-}" = "--check-drift" ]; then

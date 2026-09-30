@@ -37,7 +37,7 @@ check "network" "akhbot_internal" "$NETS"
 VOLS=$(jq_get "';'.join(m['Name']+':'+m['Destination'] for m in d['Mounts'])")
 check "volume" "akhbot_data:/data" "$VOLS"
 
-LOGD=$(jq_get "d['HostConfig']['LogConfig']['Driver']")
+LOGD=$(jq_get "d['HostConfig']['LogConfig'].get('Type') or d['HostConfig']['LogConfig'].get('Driver')")
 LOGM=$(jq_get "d['HostConfig']['LogConfig']['Config'].get('max-size','?')")
 LOGF=$(jq_get "d['HostConfig']['LogConfig']['Config'].get('max-file','?')")
 check "log driver" "json-file" "$LOGD"
