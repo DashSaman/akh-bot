@@ -76,3 +76,13 @@ RAM 45.9 MiB · CPU ≤0.31% · DB ~36 KB.
   latency only). Runbook documented in OPERATIONS.md.
 - **Existing services unaffected** (Apache 200, both other containers up, RAM 2.2Gi
   available before and after; full before/after captured).
+
+
+## 2026-09-30 (session 4 — RastehNews LIVE start)
+- Production channel wired: @RastehNews (-1004459746525); bot verified (send/edit/delete).
+- Telegram web-preview monitoring (t.me/s) added — sessionless watch sources.
+- 10 sources live (UN/AJ/DW/Guardian/IRNA/ISNA/BBC + 3 watch channels); 251 items.
+- Verification gates proved in production: high-risk single-source event auto-HELD.
+- First live editorial run: 3 stories published (remote message ids 4,5,6) via the
+  real ledger; re-run produced zero duplicates (idempotent).
+- GLM key still missing — agent-editorial substitution (documented per story).

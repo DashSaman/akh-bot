@@ -2,7 +2,9 @@
 
 # وضعیت جاری پروژه (منبع حقیقت برای نشست‌های بعدی)
 
-- **فاز:** بهداشت استقرار کامل + آماده‌سازی E2E (GLM/تلگرام: BLOCKED_EXTERNAL)
+- **فاز:** 🟢 عملیات زنده راسته‌نیوز آغاز شد (2026-09-30) — ۱۰ منبع فعال، ۳ خبر منتشرشده در @RastehNews
+- **GLM:** BLOCKED_EXTERNAL (کلید ارائه نشده) — تحریریه‌ی عامل (agent) جایگزین موقت نویسنده است
+- **تلگرام تولیدی:** LIVE — کانال @RastehNews (ID -1004459746525)
 - **جفت کامیت مخزن/ایمیج:** با `scripts/doctor.sh --check-drift` بگیرید (delta فقط-مستندات مجاز است)
 - **وضعیت اجزا:** جمع‌آور RSS=LIVE_VERIFIED · نویسنده GLM=BLOCKED_EXTERNAL (بدون کلید) · ناشر تلگرام=BLOCKED_EXTERNAL · جمع‌آور تلگرام=WAITING_FOR_CREDENTIALS · X/IG/Threads=NOT_CONFIGURED · برند=UNDECIDED · ایندکس=PREVIEW(NOINDEX)
 - **CI:** GitHub Actions (تست آفلاین + بیلد داکر) — بدون رمز، بدون تماس با سرور تولیدی
@@ -31,7 +33,9 @@
 
 # Current Status (source of truth for future sessions)
 
-- **Phase:** deployment hygiene complete + E2E staging prepared (GLM/Telegram: BLOCKED_EXTERNAL)
+- **Phase:** 🟢 RastehNews LIVE operation started (2026-09-30) — 10 sources, 3 stories published to @RastehNews
+- **GLM:** BLOCKED_EXTERNAL (no key) — agent-editorial substitution in use
+- **Production Telegram:** LIVE — @RastehNews
 - **Heads pair:** via `scripts/doctor.sh --check-drift` (docs-only deltas explicitly allowed)
 - **Component states:** RSS=LIVE_VERIFIED · GLM writer=BLOCKED_EXTERNAL · Telegram publisher=BLOCKED_EXTERNAL · Telegram collector=WAITING_FOR_CREDENTIALS · X/IG/Threads=NOT_CONFIGURED · brand=UNDECIDED · indexing=PREVIEW(NOINDEX)
 - **CI:** GitHub Actions (offline tests + Docker build) — no secrets, no production contact
