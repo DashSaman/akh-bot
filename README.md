@@ -62,6 +62,10 @@ flowchart LR
   J --> WEB[website/SEO/RSS]
 ```
 
+### انتقال به سرور دیگر (خلاصه)
+۱) بکاپ: `scripts/backup_db.sh` ← ۲) انتقال DB + `.env` ← ۳) کلون ریپو ← ۴) تنظیم رمزها ← ۵) `deploy.sh` ← ۶) `restore_db.sh` ← ۷) **`scripts/verify_instance.sh`** ← ۸) پایش ضربان‌ها
+جزئیات: `docs/MIGRATION.md` · داده زمان‌اجرأ: `docs/RUNTIME-DATA.md` · چک‌لیست: `docs/NEW-SERVER-CHECKLIST.md`
+
 مستندات کامل در `docs/` (دوزبانه برای مستندات کلیدی). نقشه راه: `docs/ROADMAP.md`.
 
 ---

@@ -1,0 +1,99 @@
+# source-seed.example.yml — NON-SECRET baseline source catalog for CLEAN installs.
+# A seed definition is NOT editorial approval: runtime verification/trust state
+# (verification_allowed, breaking, polling) is separate and owner-controlled.
+# NEVER put tokens/sessions/cookies/API keys in this file.
+# Loaded automatically ONLY when the sources table is empty (clean install);
+# existing installations always keep their registry untouched.
+
+sources:
+  - name: tg naya_foriraq            # Iraq/regional watch channel (Arabic)
+    platform: telegram
+    handle: naya_foriraq
+    url: https://t.me/s/naya_foriraq
+    language: ar
+    source_role: AGGREGATOR
+    public_display_name: نایا
+    detection_priority: 95           # Tier-1 fast-breaking discovery
+    breaking_source: true
+    verification_allowed: false      # watch source — never auto-confirmation
+    translation_required: true       # ar → fa before publication
+    enabled: true
+    notes: Owner Tier-1. Sports/entertainment deprioritized, never dropped.
+
+  - name: tg withyashar              # Iranian fast-news watch channel
+    platform: telegram
+    handle: withyashar
+    url: https://t.me/s/withyashar
+    language: fa
+    source_role: AGGREGATOR
+    public_display_name: یاشار
+    detection_priority: 95
+    breaking_source: true
+    verification_allowed: false
+    translation_required: false
+    enabled: true
+    notes: Owner Tier-1.
+
+  - name: tg caronline_original      # connectivity/internet-disruption watch (owner-confirmed handle)
+    platform: telegram
+    handle: caronline_original
+    url: https://t.me/s/caronline_original
+    language: fa
+    source_role: AGGREGATOR
+    public_display_name: کارون
+    detection_priority: 95
+    breaking_source: true
+    verification_allowed: false
+    translation_required: false
+    enabled: true
+    notes: Owner Tier-1. Topic boost INTERNET_TELECOM.
+
+  - name: Iran International         # Persian satellite newsroom (independent outlet — neutral metadata)
+    platform: rss
+    url: https://www.intelligenceonline.com/  # REPLACE with current official feed URL at activation
+    language: fa
+    source_role: MAJOR_NEWSROOM
+    public_display_name: ایران اینترنشنال
+    detection_priority: 70
+    verification_allowed: true
+    translation_required: false
+    enabled: false                   # enable after owner validates feed URL
+    notes: "Neutral provenance: independent/exile outlet (metadata only)."
+
+  - name: VOA Persian
+    platform: rss
+    url: https://www.voanews.com/api/  # REPLACE with current feed URL at activation
+    language: fa
+    source_role: MAJOR_NEWSROOM
+    public_display_name: صدای آمریکا
+    detection_priority: 70
+    verification_allowed: true
+    translation_required: false
+    enabled: false
+    notes: US-funded international broadcaster (neutral metadata).
+
+  - name: Israel Channel 14
+    platform: rss
+    url: ""                          # resolve at activation (identity discovery)
+    language: he
+    source_role: MAJOR_NEWSROOM
+    public_display_name: کانال ۱۴
+    detection_priority: 70
+    verification_allowed: true
+    translation_required: true       # he → fa
+    enabled: false
+    notes: Hebrew source; translation required. Resolve handle/ID on first activation.
+
+  - name: Donald Trump (official X)  # public-figure account — PRIORITY FOR DETECTION ONLY
+    platform: x
+    handle: realDonaldTrump
+    url: "https://x.com/realDonaldTrump"
+    language: en
+    source_role: OFFICIAL_PRIMARY
+    public_display_name: ترامپ
+    detection_priority: 95
+    breaking_source: true
+    verification_allowed: true       # proves he SAID it, not that claims are true
+    translation_required: true       # en → fa
+    enabled: false                   # X is BLOCKED_BY_COST_POLICY until owner enables
+    notes: Statement = primary evidence of the statement itself only.
