@@ -32,11 +32,14 @@ Snapshot 2026-09-30. **Selection: akhbot binds `127.0.0.1:8307` only.**
 
 ## Exposure strategy
 
-1. **Now (brand UNDECIDED):** app reachable only via SSH tunnel
-   `ssh -L 8307:127.0.0.1:8307 root@91.107.240.235` → http://127.0.0.1:8307
-2. **Later (after domain + brand approval):** isolated Apache vhost (existing proxy)
-   with `ProxyPass / http://127.0.0.1:8307/` + SSL via certbot — template prepared at
-   `scripts/apache-vhost.conf.template`. Reload (not restart), `apache2ctl configtest`
-   before reload.
+1. **NOW (verified 2026-09-30, brand UNDECIDED):** development/admin access ONLY via
+   SSH local tunnel → server `127.0.0.1:8307`. Docker stays localhost-bound.
+2. **Later (after domain + brand approval):** isolated Apache vhost with
+   `ProxyPass / http://127.0.0.1:8307/` + SSL via certbot — template at
+   `scripts/apache-vhost.conf.template`; `apache2ctl configtest` then RELOAD.
+3. **Apache inventory (read-only, 2026-09-30):** vhosts `robot.ahsg.top` and
+   `npanel.softarg.ir` on :80/:443 (both serve existing applications — untouched);
+   `proxy_module`, `proxy_http_module`, `rewrite_module`, `ssl_module` enabled, so a
+   future isolated akhbot vhost needs no new modules. No public port was opened.
 
 No public bind. No firewall changes. No other project touched.
