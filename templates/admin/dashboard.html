@@ -17,10 +17,12 @@
   {% for p, on in pauses.items() %}{% if p != 'all' and on %}<span class="badge warn">{{ p }} متوقف</span>{% endif %}{% endfor %}
 </p>
 
-<h2>اتصال سرویس‌ها</h2>
+<h2>وضعیت اجزا (صادقانه — کد موجود بودن ≠ فعال بودن)</h2>
 <ul class="plain">
   {% for name, st in integrations.items() %}
-  <li>{{ name }}: <span class="badge {{ 'ok' if st == 'CONFIGURED' else 'warn' }}">{{ st }}</span></li>
+  <li>{{ name }}:
+    <span class="badge {{ 'ok' if st in ('LIVE_VERIFIED','LIVE','UNDECIDED') else ('danger' if st == 'ERROR' else 'warn') }}">{{ st }}</span>
+  </li>
   {% endfor %}
 </ul>
 

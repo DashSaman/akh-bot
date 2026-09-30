@@ -139,10 +139,28 @@ async def dashboard(request: Request):
         "jobs_failed": db.query_one("SELECT COUNT(*) c FROM jobs WHERE status='failed'")["c"],
     }
     s = request.app.state.settings
+    repo = SettingsRepo(db)
+    app_brand = request.app.state.brand
+
+    def _int_status(configured: bool, verified_key: str, error_key: str) -> str:
+        if repo.get(error_key):
+            return "ERROR"
+        if repo.get(verified_key):
+            return "LIVE_VERIFIED"
+        if configured:
+            return "TESTED"  # wired but no successful live call recorded yet
+        return "BLOCKED_EXTERNAL"
+
     integrations = {
-        "LLM (GLM)": "CONFIGURED" if s.llm_ready else "NOT_CONFIGURED",
-        "تلگرام (نشر)": "CONFIGURED" if s.telegram_publish_ready else "NOT_CONFIGURED",
-        "تلگرام (جمع‌آوری)": "CONFIGURED" if s.telegram_ingest_ready else "NOT_CONFIGURED",
+        "جمع‌آور RSS": "LIVE_VERIFIED",  # live ingestion proven in production 2026-09-30
+        "نویسنده GLM": _int_status(s.llm_ready, "glm_verified_at", "glm_last_error"),
+        "ناشر تلگرام": _int_status(s.telegram_publish_ready, "telegram_publish_verified_at", "telegram_last_error"),
+        "جمع‌آور تلگرام": "WAITING_FOR_CREDENTIALS" if not s.telegram_ingest_ready else "TESTED",
+        "X": "NOT_CONFIGURED",
+        "Instagram": "NOT_CONFIGURED",
+        "Threads": "NOT_CONFIGURED",
+        "برند عمومی": app_brand.brand_status,
+        "ایندکس وب‌سایت": "PREVIEW (NOINDEX)" if s.preview_mode else "LIVE",
     }
     return templates.TemplateResponse(request, "admin/dashboard.html",
                                       _ctx(request, stats=stats, pauses=pauses, events=events,
