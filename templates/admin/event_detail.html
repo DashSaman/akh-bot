@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+{% block title %}رویداد {{ event.id }}{% endblock %}
+{% block content %}
+<h1>رویداد #{{ event.id }}</h1>
+<p><b>{{ event.title }}</b></p>
+<p>گزارش‌ها: {{ event.report_count }} · خاستگاه مستقل: {{ event.independent_count }} · وضعیت: {{ event.status }} · راستی‌آزمایی: {{ event.verification }}</p>
+
+{% if story %}
+<p>خبر تولیدشده: <a href="/story/{{ story.slug }}" target="_blank">{{ story.headline }}</a> (نسخه {{ story.version }}، وضعیت {{ story.status }})</p>
+{% endif %}
+
+<h2>ادعاها</h2>
+<table>
+  <tr><th>شناسه</th><th>متن ادعا</th><th>حالت</th><th>ریسک</th><th>خاستگاه مستقل</th></tr>
+  {% for c in claims %}
+  <tr><td>{{ c.id }}</td><td class="small">{{ c.text }}</td><td>{{ c.state }}</td><td>{{ c.risk_level }}</td><td>{{ c.independent_sources }}</td></tr>
+  {% else %}
+  <tr><td colspan="5">ادعایی ثبت نشده است.</td></tr>
+  {% endfor %}
+</table>
+
+<h2>گزارش‌ها (مواد خام)</h2>
+<table>
+  <tr><th>شناسه</th><th>منبع</th><th>عنوان</th><th>خاستگاه</th><th>تکراری</th><th>واجد شرایط</th><th>زمان</th></tr>
+  {% for i in items %}
+  <tr><td>{{ i.id }}</td><td>{{ i.source_id }}</td><td class="small">{{ i.title[:60] }}</td><td class="small">{{ i.lineage_key }}</td><td>{{ 'بله' if i.is_duplicate else 'خیر' }}</td><td>{{ 'بله' if i.activation_ok else 'خیر' }}</td><td class="small">{{ i.published_at or '—' }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}خانه{% endblock %}
+{% block content %}
+<section class="story-list">
+  {% for s in stories %}
+  <article class="story-card">
+    <h2><a href="/story/{{ s.slug }}">{{ s.headline }}</a></h2>
+    <p class="lead">{{ s.lead }}</p>
+    <div class="meta">{{ s.published_at or s.created_at }} · {{ drafts[s.id].get("category","") }}</div>
+  </article>
+  {% else %}
+  <p class="empty">هنوز خبر منتشرشده‌ای وجود ندارد.</p>
+  {% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "admin/base.html" %}
+{% block title %}انتشارها{% endblock %}
+{% block content %}
+<h1>دفتر انتشار (Publication Ledger)</h1>
+<table>
+  <tr><th>شناسه</th><th>خبر</th><th>پلتفرم</th><th>وضعیت</th><th>تلاش</th><th>شناسه پیام</th><th>خطا</th><th>زمان</th></tr>
+  {% for p in pubs %}
+  <tr><td>{{ p.id }}</td><td>{{ p.story_id }}</td><td>{{ p.platform }}</td><td>{{ p.status }}</td><td>{{ p.attempt }}</td><td class="small">{{ p.remote_id or '—' }}</td><td class="small error">{{ p.error or '' }}</td><td class="small">{{ p.updated_at }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

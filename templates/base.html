@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ brand.name_fa }}{% endblock %} — {{ brand.short_name }}</title>
+  {% if preview_mode %}<meta name="robots" content="noindex, nofollow">{% endif %}
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="{{ brand.favicon }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% if preview_mode %}<div class="preview-banner">حالت پیش‌نمایش — برند نهایی هنوز انتخاب نشده (BRAND_STATUS=UNDECIDED)</div>{% endif %}
+<header class="site-header">
+  <a class="brand" href="/">{{ brand.name_fa }}</a>
+  <span class="tagline">{{ brand.tagline_fa }}</span>
+  <nav>
+    <a href="/">خانه</a>
+    <a href="/latest">جدیدترین‌ها</a>
+    <a href="/feed.xml">RSS</a>
+  </nav>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+<footer class="site-footer">
+  <div>{{ brand.name_fa }} — {{ brand.editorial_attribution_fa }}</div>
+  <nav>
+    {% for slug, meta in [("about","درباره ما"),("contact","تماس"),("editorial-policy","سیاست تحریریه"),("source-policy","سیاست منابع"),("verification","راستی‌آزمایی"),("corrections","اصلاحیه‌ها"),("ai-use","هوش مصنوعی"),("privacy","حریم خصوصی"),("terms","شرایط"),("advertising","تبلیغات")] %}
+    <a href="/page/{{ slug }}">{{ meta }}</a>
+    {% endfor %}
+  </nav>
+</footer>
+</body>
+</html>

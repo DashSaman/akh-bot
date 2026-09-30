@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}جدیدترین‌ها{% endblock %}
+{% block content %}
+<h1>جدیدترین اخبار</h1>
+<section class="story-list">
+  {% for s in stories %}
+  <article class="story-card">
+    <h2><a href="/story/{{ s.slug }}">{{ s.headline }}</a></h2>
+    <p class="lead">{{ s.lead }}</p>
+    <div class="meta">{{ s.published_at or s.created_at }}</div>
+  </article>
+  {% else %}
+  <p class="empty">موردی موجود نیست.</p>
+  {% endfor %}
+</section>
+{% endblock %}

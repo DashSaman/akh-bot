@@ -1,0 +1,20 @@
+{% extends "admin/base.html" %}
+{% block title %}رویدادها{% endblock %}
+{% block content %}
+<h1>رویدادها</h1>
+<table>
+  <tr><th>شناسه</th><th>عنوان</th><th>گزارش‌ها</th><th>خاستگاه مستقل</th><th>زبان‌ها</th><th>وضعیت</th><th>راستی‌آزمایی</th><th>آخرین مشاهده</th></tr>
+  {% for e in events %}
+  <tr>
+    <td>{{ e.id }}</td>
+    <td><a href="/admin/events/{{ e.id }}">{{ e.title[:70] }}</a></td>
+    <td>{{ e.report_count }}</td>
+    <td>{{ e.independent_count }}</td>
+    <td class="small">{{ e.languages_json }}</td>
+    <td>{{ e.status }}</td>
+    <td>{{ e.verification }}</td>
+    <td class="small">{{ e.last_seen_at }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

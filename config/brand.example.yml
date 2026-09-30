@@ -1,0 +1,31 @@
+# Central brand configuration — THE single source for every public surface.
+# BRAND_STATUS stays UNDECIDED until the owner explicitly approves a final identity.
+# Changing the public brand later only requires editing this file (+ PUBLIC_BASE_URL);
+# no database, network, path or code renames.
+brand_status: UNDECIDED
+
+name_fa: "اخ‌بات"            # placeholder preview name — NOT the final brand
+name_en: "akh-bot preview"
+short_name: "akh"
+tagline_fa: "پیش‌نمایش سکوی خبری مبتنی بر شواهد — برند نهایی هنوز انتخاب نشده است"
+tagline_en: "Evidence-based newsroom preview — final brand not selected yet"
+
+logo: ""                      # absolute URL once real logo exists (schema needs full URL)
+favicon: "/static/favicon.svg"
+
+primary_domain: ""            # empty until decided
+organization_url: ""
+
+telegram_handle: ""
+x_handle: ""
+instagram_handle: ""
+threads_handle: ""
+facebook_handle: ""
+youtube_handle: ""
+
+contact_email: ""
+same_as: []                   # filled after official accounts exist
+
+publisher_type: NewsMediaOrganization
+editorial_attribution_fa: "تحریریه خودکار مبتنی بر شواهد"
+editorial_attribution_en: "Automated evidence-based editorial desk"

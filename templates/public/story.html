@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ story.headline }}{% endblock %}
+{% block head %}
+{% if not preview_mode and base_url %}<link rel="canonical" href="{{ base_url }}/story/{{ story.slug }}">{% endif %}
+<meta name="description" content="{{ draft.seo_description or story.lead }}">
+<meta property="og:title" content="{{ draft.seo_title or story.headline }}">
+<meta property="og:description" content="{{ draft.seo_description or story.lead }}">
+<meta property="og:type" content="article">
+<meta property="og:url" content="{{ base_url }}/story/{{ story.slug }}">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">{{ graph_json | safe }}</script>
+{% endblock %}
+{% block content %}
+<article class="story">
+  <h1>{{ story.headline }}</h1>
+  <p class="lead">{{ story.lead }}</p>
+  <div class="meta">منتشر شده: {{ story.published_at or story.created_at }} · به‌روزشده: {{ story.updated_at }} · {{ brand.editorial_attribution_fa }}</div>
+
+  <section><h2>خلاصه</h2><p>{{ story.lead }}</p></section>
+
+  <section><h2>چه اتفاقی افتاده؟</h2>
+    {% for p in draft.body %}<p>{{ p.text }}</p>{% endfor %}
+  </section>
+
+  {% if draft.confirmed_facts %}
+  <section><h2>چه چیزهایی تأیید شده؟</h2><ul>{% for f in draft.confirmed_facts %}<li>{{ f }}</li>{% endfor %}</ul></section>
+  {% endif %}
+
+  {% if draft.uncertain_facts %}
+  <section><h2>چه چیزهایی هنوز تأیید نشده؟</h2><ul>{% for f in draft.uncertain_facts %}<li>{{ f }}</li>{% endfor %}</ul></section>
+  {% endif %}
+
+  {% if draft.timeline %}
+  <section><h2>خط زمانی</h2><ul>{% for t in draft.timeline %}<li><strong>{{ t.time }}</strong> — {{ t.event }}</li>{% endfor %}</ul></section>
+  {% endif %}
+
+  {% if draft.source_references %}
+  <section><h2>منابع</h2><ul>{% for s in draft.source_references %}<li>{{ s.name }} ({{ s.platform }})</li>{% endfor %}</ul></section>
+  {% endif %}
+
+  {% if related %}
+  <section><h2>اخبار مرتبط</h2><ul>{% for r in related %}<li><a href="/story/{{ r.slug }}">{{ r.headline }}</a></li>{% endfor %}</ul></section>
+  {% endif %}
+</article>
+{% endblock %}

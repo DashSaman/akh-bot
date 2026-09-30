@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% block title %}داشبورد{% endblock %}
+{% block content %}
+<h1>داشبورد</h1>
+<section class="stat-grid">
+  <div class="stat"><b>{{ stats.sources_approved }}</b><span>منبع تأییدشده (از {{ stats.sources_total }})</span></div>
+  <div class="stat"><b>{{ stats.items }}</b><span>ماده خام</span></div>
+  <div class="stat"><b>{{ stats.events }}</b><span>رویداد</span></div>
+  <div class="stat"><b>{{ stats.stories }}</b><span>خبر تولیدشده</span></div>
+  <div class="stat"><b>{{ stats.publications_sent }}</b><span>انتشار موفق</span></div>
+  <div class="stat"><b>{{ stats.jobs_failed }}</b><span>کار شکست‌خورده</span></div>
+</section>
+
+<h2>وضعیت انتشار (کلید توقف)</h2>
+<p class="pause-state">
+  {% if pauses.all %}<span class="badge danger">توقف کل انتشار فعال</span>{% else %}<span class="badge ok">انتشار فعال</span>{% endif %}
+  {% for p, on in pauses.items() %}{% if p != 'all' and on %}<span class="badge warn">{{ p }} متوقف</span>{% endif %}{% endfor %}
+</p>
+
+<h2>اتصال سرویس‌ها</h2>
+<ul class="plain">
+  {% for name, st in integrations.items() %}
+  <li>{{ name }}: <span class="badge {{ 'ok' if st == 'CONFIGURED' else 'warn' }}">{{ st }}</span></li>
+  {% endfor %}
+</ul>
+
+<h2>آخرین رویدادها</h2>
+<table>
+  <tr><th>شناسه</th><th>عنوان</th><th>گزارش‌ها</th><th>خاستگاه مستقل</th><th>وضعیت</th><th>راستی‌آزمایی</th></tr>
+  {% for e in events %}
+  <tr><td>{{ e.id }}</td><td><a href="/admin/events/{{ e.id }}">{{ e.title }}</a></td><td>{{ e.report_count }}</td><td>{{ e.independent_count }}</td><td>{{ e.status }}</td><td>{{ e.verification }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>کارهای اخیر</h2>
+<table>
+  <tr><th>شناسه</th><th>نوع</th><th>وضعیت</th><th>تلاش</th><th>خطا</th></tr>
+  {% for j in jobs %}
+  <tr><td>{{ j.id }}</td><td>{{ j.job_type }}</td><td>{{ j.status }}</td><td>{{ j.attempts }}</td><td class="small">{{ j.last_error or '' }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

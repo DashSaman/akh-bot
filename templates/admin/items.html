@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% block title %}مواد خام{% endblock %}
+{% block content %}
+<h1>مواد خام (شواهد اصلی — تغییرناپذیر)</h1>
+<table>
+  <tr><th>شناسه</th><th>منبع</th><th>عنوان</th><th>زبان</th><th>زمان انتشار</th><th>واجد شرایط انتشار</th><th>وضعیت پردازش</th></tr>
+  {% for i in items %}
+  <tr>
+    <td>{{ i.id }}</td><td>{{ i.source_id }}</td>
+    <td class="small">{{ i.title[:80] }}</td>
+    <td>{{ i.language }}</td>
+    <td class="small">{{ i.published_at or '—' }}</td>
+    <td>{{ 'بله' if i.activation_ok else 'فقط ذخیره (backfill)' }}</td>
+    <td>{{ i.processed_state }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+{% block title %}تنظیمات{% endblock %}
+{% block content %}
+<h1>تنظیمات و کلیدهای توقف اضطراری</h1>
+
+<h2>توقف انتشار</h2>
+<p>با توقف کل، جمع‌آوری ادامه می‌یابد اما هیچ خبری منتشر نمی‌شود.</p>
+<form method="post" action="/admin/settings/pause" class="inline-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <input type="hidden" name="key" value="pause_all">
+  <input type="hidden" name="value" value="{{ '0' if pauses.all else '1' }}">
+  <button class="{{ 'danger' if not pauses.all else 'ok' }}" type="submit">
+    {{ 'فعال‌سازی توقف کل انتشار' if not pauses.all else 'از سرگیری انتشار کل' }}
+  </button>
+</form>
+
+<h2>توقف تک‌پلتفرمی</h2>
+<table>
+  <tr><th>پلتفرم</th><th>وضعیت</th><th>عملیات</th></tr>
+  {% for p in platforms %}
+  <tr>
+    <td>{{ p }}</td>
+    <td>{{ 'متوقف' if pauses[p] else 'فعال' }}</td>
+    <td>
+      <form method="post" action="/admin/settings/pause" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="key" value="pause_platform:{{ p }}">
+        <input type="hidden" name="value" value="{{ '0' if pauses[p] else '1' }}">
+        <button type="submit">{{ 'از سرگیری' if pauses[p] else 'توقف' }}</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>برند</h2>
+<p>وضعیت برند عمومی: <b>{{ brand_status }}</b> — تا تأیید مالک، هیچ هویت عمومی دائمی ساخته نمی‌شود. مقدارها در <code>config/brand.yml</code> (و <code>PUBLIC_BASE_URL</code>) تنظیم می‌شوند.</p>
+{% endblock %}

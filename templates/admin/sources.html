@@ -1,0 +1,65 @@
+{% extends "admin/base.html" %}
+{% block title %}منابع{% endblock %}
+{% block content %}
+<h1>منابع</h1>
+<h2>افزودن منبع</h2>
+<form method="post" action="/admin/sources" class="grid-form">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label>نام <input name="name" required></label>
+  <label>پلتفرم
+    <select name="platform"><option value="rss">RSS</option><option value="telegram">تلگرام</option><option value="x">X</option><option value="website">وب‌سایت</option></select>
+  </label>
+  <label>نشانی/شناسه <input name="url" placeholder="https://... یا @channel"></label>
+  <label>شناسه خارجی <input name="external_id" placeholder="channel id / feed key"></label>
+  <label>زبان <select name="language"><option value="fa">فارسی</option><option value="ar">عربی</option><option value="en">انگلیسی</option></select></label>
+  <label>دسته <input name="category" value="general"></label>
+  <label>نوع منبع
+    <select name="source_type">
+      <option value="news_organization">رسانه خبری</option>
+      <option value="official_institution">نهاد رسمی</option>
+      <option value="official_account">حساب رسمی</option>
+      <option value="journalist">خبرنگار</option>
+      <option value="local_newsroom">تحریریه محلی</option>
+      <option value="local_observer">ناظر محلی</option>
+      <option value="telegram_aggregator">تجمیع‌کننده تلگرام</option>
+    </select>
+  </label>
+  <label>وضعیت اولیه
+    <select name="status"><option value="DISCOVERED">DISCOVERED (غیرمطمئن)</option><option value="APPROVED">APPROVED (تأیید)</option></select>
+  </label>
+  <label>فاصله نظرسنجی (دقیقه) <input name="polling_interval_min" type="number" value="15" min="1"></label>
+  <button type="submit">افزودن</button>
+</form>
+
+<h2>فهرست منابع</h2>
+<table>
+  <tr><th>شناسه</th><th>نام</th><th>پلتفرم</th><th>وضعیت</th><th>فعال</th><th>سلامت</th><th>آخرین موفقیت</th><th>عملیات</th></tr>
+  {% for s in sources %}
+  <tr>
+    <td>{{ s.id }}</td>
+    <td>{{ s.name }}<div class="small">{{ s.url or s.external_id }}</div></td>
+    <td>{{ s.platform }}</td>
+    <td>
+      <form method="post" action="/admin/sources/{{ s.id }}/status" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <select name="status" onchange="this.form.submit()">
+          <option value="APPROVED" {% if s.status=='APPROVED' %}selected{% endif %}>APPROVED</option>
+          <option value="DISCOVERED" {% if s.status=='DISCOVERED' %}selected{% endif %}>DISCOVERED</option>
+          <option value="BLOCKED" {% if s.status=='BLOCKED' %}selected{% endif %}>BLOCKED</option>
+        </select>
+      </form>
+      <div class="small">فعال‌سازی: {{ s.activated_at or '—' }}</div>
+    </td>
+    <td>{{ 'روشن' if s.enabled else 'خاموش' }}</td>
+    <td>{{ '%.2f' | format(s.health_score) }}</td>
+    <td class="small">{{ s.last_success_at or '—' }}{% if s.last_error %}<div class="error small">{{ s.last_error }}</div>{% endif %}</td>
+    <td>
+      <form method="post" action="/admin/sources/{{ s.id }}/toggle" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button type="submit">{{ 'غیرفعال' if s.enabled else 'فعال' }}</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}
