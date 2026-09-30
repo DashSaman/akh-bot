@@ -6,7 +6,7 @@ set -uo pipefail
 APP=/opt/akhbot/app
 fail=0
 line() { printf '%-30s %s\n' "$1" "$2"; }
-ck()   { if [ "$2" = "PASS" ]; then line "$1" PASS; else line "$1" "FAIL ($2)"; fail=1; fi; }
+ck()   { case "$2" in PASS*) line "$1" "$2";; *) line "$1" "FAIL ($2)"; fail=1;; esac; }
 
 REPO=$(git -C "$APP" rev-parse --short HEAD 2>/dev/null || echo "?")
 IMG=$(docker exec akhbot-app printenv AKHBOT_GIT_SHA 2>/dev/null || echo "?")
