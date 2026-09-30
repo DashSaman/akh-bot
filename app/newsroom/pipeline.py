@@ -24,6 +24,7 @@ from app.newsroom.models import (
     CLAIMS_SYSTEM, StoryDraft, build_writer_user_prompt,
 )
 from app.verification.gates import decide_claim_state, event_can_auto_publish, is_high_risk
+from app.publishing.fanout import distribution_plan
 
 log = logging.getLogger("akh.pipeline")
 
@@ -150,6 +151,48 @@ def merge_and_verify_claims(db: Database, event_id: int,
     return claims_repo.for_event(event_id)
 
 
+def _public_text_for(det, brand, mode="hidden"):
+    from app.publishing.telegram_bot import build_public_text
+    return build_public_text(det["lifecycle"], det["body"], brand, mode, True)
+
+
+def _create_and_enqueue(db, settings, brand, event_id, det):
+    from app.publishing.telegram_bot import build_public_text
+    text = build_public_text(det["lifecycle"], det["body"], brand, "hidden", True)
+    draft = {"headline": det["body"].split("chr(10)")[0][:120], "lead": det["body"],
+             "platform_variants": {"telegram": text},
+             "generation_mode": "DETERMINISTIC", "claim_refs": det.get("claim_refs", [])}
+    story_id = StoriesRepo(db).create(event_id, draft["headline"], draft["lead"], draft)
+    db.execute("UPDATE stories SET lifecycle=? WHERE id=?",
+               ("PROVISIONAL" if det["lifecycle"] == "PROVISIONAL" else "CONFIRMED", story_id))
+    _enqueue_platforms(db, settings, story_id, text, det["lifecycle"])
+    return story_id
+
+
+def _publish_deterministic(db, settings, brand, story, det, lifecycle):
+    from app.publishing.telegram_bot import build_public_text
+    text = build_public_text(det["lifecycle"], det["body"], brand, "hidden", True)
+    draft = {"headline": det["body"].split("chr(10)")[0][:120], "lead": det["body"],
+             "platform_variants": {"telegram": text},
+             "generation_mode": "DETERMINISTIC", "claim_refs": det.get("claim_refs", [])}
+    StoriesRepo(db).set_lifecycle(story["id"], lifecycle, "evidence changed (reverify)", draft)
+    _enqueue_platforms(db, settings, story["id"], text, lifecycle)
+
+
+def _enqueue_platforms(db, settings, story_id, text, lifecycle):
+    from app.db.repo import SettingsRepo
+    ph = sha256_hex(text)
+    repo = SettingsRepo(db)
+    for platform in distribution_plan(lifecycle, settings, repo):
+        if platform == "website_preview":
+            continue
+        pid = PublicationsRepo(db).upsert(story_id, platform, ph, 1)
+        JobsRepo(db).enqueue(
+            "publish_%s" % platform,
+            {"story_id": story_id, "platform": platform, "payload_hash": ph,
+             "text": text, "publication_id": pid},
+            dedupe_key="pub:%s:%s:%s" % (platform, story_id, ph[:16]))
+
 def llm_budget_ok(db: Database, settings: Any) -> bool:
     """Cost guard: real LLM calls are recorded in llm_cache; cap them per minute/hour."""
     if settings is None:
@@ -165,6 +208,32 @@ def llm_budget_ok(db: Database, settings: Any) -> bool:
             log.warning("llm budget exceeded: %s calls in %ss (limit %s)", n, seconds, limit)
             return False
     return True
+
+
+ACTIVE_EVENT_STATUSES = ("NEW", "CLUSTERED", "READY", "HELD")
+
+
+def deterministic_story_text(lifecycle: str, event: dict[str, Any],
+                             claims: list[dict[str, Any]], items: list[dict[str, Any]],
+                             source_roles: dict[int, str]) -> dict[str, Any]:
+    """NO-AI safe templates: ONLY structured known fields, no invented prose.
+    Returns draft dict with a telegram variant; caller applies brand footer."""
+    official = any(source_roles.get(i["source_id"]) == "OFFICIAL_PRIMARY" for i in items)
+    if lifecycle == "CONFIRMED" and claims:
+        main = next((c for c in claims if c["state"] in ("CONFIRMED", "CORROBORATED")), claims[0])
+        if official:
+            body = ("[سازمان رسمی] در اطلاعیه‌ای اعلام کرد:\n" + main["text"])
+            status = "CONFIRMED_OFFICIAL"
+        else:
+            body = ("بر پایه گزارش‌های رسیده:\n" + main["text"] +
+                    "\nاین موارد از منابع تحت پایش راسته تأیید شده است.")
+            status = "CONFIRMED"
+    else:
+        body = ("گزارش‌هایی درباره «" + event["title"][:120] + "» منتشر شده است.\n"
+                "این اطلاعات تاکنون به‌طور مستقل تأیید نشده است.")
+        status = "PROVISIONAL"
+    return {"lifecycle": status, "body": body,
+            "claim_refs": [str(c["id"]) for c in claims[:3]]}
 
 
 async def process_new_items(db: Database, provider: LLMProvider | None,
@@ -187,23 +256,24 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
         summary["new_events"].add(result["event_id"])
     summary["new_events"] = len(summary["new_events"])
 
-    # events with fresh eligible reports → claims → gates → writer
+    # active events: NEW/CLUSTERED/READY plus HELD (NEVER terminal) — re-verified
+    # every pass; existing stories are UPDATED, not skipped (no starvation).
     verification_flags = {
         s["id"]: s["verification_allowed"] for s in SourcesRepo(db).list()
     }
+    source_roles = {s["id"]: s["source_role"] for s in SourcesRepo(db).list()}
     llm_allowed = provider is not None and llm_budget_ok(db, settings)
-    for event in events_repo.list(limit=50):
-        if event["status"] not in ("NEW", "CLUSTERED", "READY"):
+    for event in events_repo.list(limit=80):
+        if event["status"] not in ACTIVE_EVENT_STATUSES:
             continue
-        if stories.by_event(event["id"]):
-            continue
+        existing_story = stories.by_event(event["id"])
         event_items = events_repo.items(event["id"])
         eligible = [i for i in event_items if i["activation_ok"]]
         if not eligible:
             continue
         baseline = build_claim_evidence(event, event_items, verification_flags)
         llm_claims: list[str] | None = None
-        if provider is not None and llm_allowed:
+        if provider is not None and llm_allowed and not existing_story:
             try:
                 llm_claims = await llm_extract_claims(provider, event, event_items)
             except Exception as e:  # noqa: BLE001 — LLM outage must not stop collection
@@ -211,12 +281,32 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
                 llm_claims = None
         claims = merge_and_verify_claims(db, event["id"], baseline, llm_claims)
         ok, reason = event_can_auto_publish([dict(c) for c in claims])
+        summary_claims = [dict(c) for c in claims]
+
+        if existing_story:
+            # evidence changed? promote/update instead of skipping
+            current = existing_story.get("lifecycle") or "CONFIRMED"
+            if ok and current in ("PROVISIONAL", "VERIFYING", "DETECTED"):
+                det = deterministic_story_text("CONFIRMED", event, summary_claims, eligible, source_roles)
+                _publish_deterministic(db, settings, brand, existing_story, det, "CONFIRMED")
+                events_repo.set_status(event["id"], "PUBLISHED")
+                summary["stories"] += 1
+            elif not ok and current == "CONFIRMED":
+                pass  # confirmed story, gates still fine, nothing to change
+            db.execute("UPDATE events SET processed_at=? WHERE id=?", (utcnow(), event["id"]))
+            continue
+
         if not ok:
-            events_repo.set_status(event["id"], "HELD", "CONFLICTING" if reason == "CONFLICTING_CLAIMS" else "SINGLE_SOURCE")
+            events_repo.set_status(event["id"], "HELD",
+                                    "CONFLICTING" if reason == "CONFLICTING_CLAIMS" else "SINGLE_SOURCE")
             log.info("event %s held: %s", event["id"], reason, extra={"event_id": event["id"]})
             continue
         if provider is None or not llm_allowed:
-            events_repo.set_status(event["id"], "READY")  # waiting for LLM config/budget
+            # DETERMINISTIC MODE: safe structured publication without any AI
+            det = deterministic_story_text("CONFIRMED", event, summary_claims, eligible, source_roles)
+            story_id = _create_and_enqueue(db, settings, brand, event["id"], det)
+            events_repo.set_status(event["id"], "PUBLISHED")
+            summary["stories"] += 1
             continue
 
         from app.newsroom.models import WRITER_SYSTEM
