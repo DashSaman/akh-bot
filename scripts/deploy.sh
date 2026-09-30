@@ -8,7 +8,7 @@ APP_DIR="${AKH_DIR:-/opt/akhbot}"
 PORT="${AKH_PORT:-8307}"
 IMAGE="akhbot-app:latest"
 NET="akhbot_internal"
- VOL="akhbot_data"
+VOL="akhbot_data"
 
 cd "$APP_DIR/app"
 

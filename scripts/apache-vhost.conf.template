@@ -1,0 +1,18 @@
+# Apache vhost template (activate ONLY after brand/domain approval)
+# Place at /etc/apache2/sites-available/akhbot.conf, enable, then:
+#   apache2ctl configtest && systemctl reload apache2   (reload, never restart)
+# SSL via certbot: certbot --apache -d <domain>
+
+<VirtualHost *:80>
+    ServerName <domain>
+    ProxyPreserveHost On
+    ProxyPass / http://127.0.0.1:8307/
+    ProxyPassReverse / http://127.0.0.1:8307/
+    RequestHeader set X-Forwarded-Proto "http"
+    # basic hardening
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    # logs isolated per project
+    CustomLog ${APACHE_LOG_DIR}/akhbot_access.log combined
+    ErrorLog ${APACHE_LOG_DIR}/akhbot_error.log
+</VirtualHost>
