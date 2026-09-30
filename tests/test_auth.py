@@ -32,3 +32,32 @@ def test_admin_pages_render(admin_client):
     for path in ("/admin/sources", "/admin/items", "/admin/events", "/admin/publications", "/admin/settings"):
         resp = admin_client.get(path)
         assert resp.status_code == 200, path
+
+
+def _csrf_of(client):
+    return client.cookies.get("akh_csrf") or client.get("/admin/login").cookies.get("akh_csrf")
+
+
+def test_admin_mutations_require_csrf(admin_client):
+    """Every admin POST without a valid CSRF token must be rejected with 403."""
+    cases = [
+        ("/admin/sources", {"name": "x", "platform": "rss", "url": "https://x.example/f"}),
+        ("/admin/settings/pause", {"key": "pause_all", "value": "1"}),
+        ("/admin/logout", {}),
+    ]
+    for path, fields in cases:
+        resp = admin_client.post(path, data=fields, follow_redirects=False)
+        assert resp.status_code == 403, (path, resp.status_code)
+
+
+def test_admin_mutations_with_csrf_pass(admin_client):
+    token = _csrf_of(admin_client)
+    resp = admin_client.post(
+        "/admin/settings/pause",
+        data={"key": "pause_all", "value": "1", "csrf": token},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    # cleanup: unpause
+    admin_client.post("/admin/settings/pause",
+                      data={"key": "pause_all", "value": "0", "csrf": token})

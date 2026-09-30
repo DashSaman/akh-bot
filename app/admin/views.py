@@ -58,6 +58,13 @@ async def require_login(request: Request) -> HTMLResponse | None:
     return RedirectResponse("/admin/login", status_code=303)
 
 
+def _csrf_reject(request: Request, submitted: str) -> HTMLResponse | None:
+    """All admin mutations require the double-submit CSRF token."""
+    if check_csrf(submitted, request.cookies.get(CSRF_COOKIE)):
+        return None
+    return HTMLResponse("درخواست نامعتبر (CSRF).", status_code=403)
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
     # token must exist in BOTH the rendered form and the cookie on the very first GET
@@ -95,7 +102,9 @@ async def login(request: Request, username: str = Form(""), password: str = Form
 
 
 @router.post("/logout")
-async def logout(request: Request):
+async def logout(request: Request, csrf: str = Form("")):
+    if (r := _csrf_reject(request, csrf)):
+        return r
     resp = RedirectResponse("/admin/login", status_code=303)
     resp.delete_cookie(SESSION_COOKIE)
     return resp
@@ -153,9 +162,10 @@ async def source_create(request: Request, name: str = Form(...), platform: str =
                         url: str = Form(""), external_id: str = Form(""),
                         language: str = Form("fa"), country: str = Form(""),
                         category: str = Form("general"), source_type: str = Form("news_organization"),
-                        status: str = Form("DISCOVERED"), polling_interval_min: int = Form(15)):
-    if (r := await require_login(request)):
-        return r
+                        status: str = Form("DISCOVERED"), polling_interval_min: int = Form(15),
+                        csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
     SourcesRepo(_db(request)).create(
         name=name, platform=platform, url=url, external_id=external_id, language=language,
         country=country, category=category, source_type=source_type, status=status,
@@ -165,18 +175,19 @@ async def source_create(request: Request, name: str = Form(...), platform: str =
 
 
 @router.post("/sources/{source_id}/status")
-async def source_set_status(request: Request, source_id: int, status: str = Form(...)):
-    if (r := await require_login(request)):
-        return r
+async def source_set_status(request: Request, source_id: int, status: str = Form(...),
+                            csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
     if status in ("APPROVED", "DISCOVERED", "BLOCKED"):
         SourcesRepo(_db(request)).set_status(source_id, status)
     return RedirectResponse("/admin/sources", status_code=303)
 
 
 @router.post("/sources/{source_id}/toggle")
-async def source_toggle(request: Request, source_id: int):
-    if (r := await require_login(request)):
-        return r
+async def source_toggle(request: Request, source_id: int, csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
     repo = SourcesRepo(_db(request))
     s = repo.get(source_id)
     if s:
@@ -235,9 +246,10 @@ async def settings_page(request: Request):
 
 
 @router.post("/settings/pause")
-async def set_pause(request: Request, key: str = Form(...), value: str = Form(...)):
-    if (r := await require_login(request)):
-        return r
+async def set_pause(request: Request, key: str = Form(...), value: str = Form(...),
+                    csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
     allowed = {"pause_all"} | {f"pause_platform:{p}" for p in
                                ("telegram", "x", "instagram", "threads", "website")}
     if key in allowed and value in ("0", "1"):

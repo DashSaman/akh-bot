@@ -1,5 +1,6 @@
 # secrets / runtime
 .env
+config/brand.yml
 *.session
 *.session-journal
 data/
