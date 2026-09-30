@@ -34,7 +34,9 @@ class Settings(BaseSettings):
 
     max_provisional_posts_per_hour: int = 6
     max_confirmed_posts_per_hour: int = 12
-    min_breaking_importance: int = 60    # 0..100; below → no provisional publication
+    min_breaking_importance: int = 60
+    standard_max_age_minutes: int = 180
+    breaking_max_age_minutes: int = 720    # 0..100; below → no provisional publication
     telegram_ingest_api_id: int = 0
     telegram_ingest_api_hash: str = ""
     telegram_ingest_session: str = ""

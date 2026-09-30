@@ -53,6 +53,10 @@ class JobRunner:
             await asyncio.sleep(self.settings.jobs_interval_seconds)
 
 
+def lifecycle_now(story) -> str:
+    return (story.get("lifecycle") if isinstance(story, dict) else None) or "CONFIRMED"
+
+
 def make_publish_handler(db: Database, settings: Settings,
                          telegram_publisher_factory: Callable[[], Any]) -> Handler:
     """Publishes a story to a platform once (ledger idempotency + pauses + rate limits)."""
@@ -70,6 +74,25 @@ def make_publish_handler(db: Database, settings: Settings,
         story = stories.get(story_id)
         if not story:
             return True
+
+        # FRESHNESS GATE: stale backlog must not flood the channel later.
+        ev = db.query_one("SELECT * FROM events WHERE id=?", (story["event_id"],))
+        if ev:
+            from datetime import timezone as _tz
+            age_min = None
+            for stamp in (ev["last_seen_at"], story["created_at"]):
+                try:
+                    dt = datetime.fromisoformat(stamp)
+                    age_min = (datetime.now(_tz.utc) - dt).total_seconds() / 60
+                    break
+                except (TypeError, ValueError):
+                    continue
+            max_age = float(getattr(settings, "standard_max_age_minutes", 180))
+            if age_min is not None and age_min > max_age and lifecycle_now(story) in ("CONFIRMED",):
+                pubs.mark(pubs.upsert(story_id, platform, payload_hash, int(story["version"])),
+                          "SKIPPED", error="STALE_SUPERSEDED")
+                log.info("publish suppressed: stale %.0fmin (story %s)", age_min, story_id)
+                return True
 
         # lifecycle-aware rate caps (provisional stories are noisier)
         lifecycle = story.get("lifecycle") or "CONFIRMED"

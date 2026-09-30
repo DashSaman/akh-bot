@@ -31,7 +31,13 @@ def brand_signature(brand: Any, enabled: bool = True) -> str:
     if not enabled:
         return ""
     handle = getattr(brand, "telegram_handle", "")
-    return f"🆔 @{handle}" if handle else ""
+    name, tag = getattr(brand, "name_fa", ""), getattr(brand, "tagline_fa", "")
+    lines = []
+    if name and tag:
+        lines.append(f"— {name} | {tag}")
+    if handle:
+        lines.append(f"🆔 @{handle}")
+    return chr(10).join(lines)
 
 
 def sanitize_public_copy(text: str, mode: str = "hidden", brand: Any = None) -> str:

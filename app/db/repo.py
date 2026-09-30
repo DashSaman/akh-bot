@@ -445,7 +445,8 @@ class JobsRepo:
         self.db = db
 
     def enqueue(self, job_type: str, payload: dict | None = None, run_after: datetime | None = None,
-                max_attempts: int = 5, dedupe_key: str | None = None) -> int | None:
+                max_attempts: int = 5, dedupe_key: str | None = None,
+                priority: int = 60) -> int | None:
         now = utcnow()
         if dedupe_key:
             row = self.db.query_one("SELECT id FROM jobs WHERE dedupe_key=?", (dedupe_key,))
@@ -454,9 +455,9 @@ class JobsRepo:
         try:
             cur = self.db.execute(
                 "INSERT INTO jobs(job_type,payload_json,status,attempts,max_attempts,run_after,"
-                "dedupe_key,created_at,updated_at) VALUES(?,?, 'pending',0,?,?,?,?,?)",
+                "dedupe_key,created_at,updated_at,priority) VALUES(?,?, 'pending',0,?,?,?,?,?,?)",
                 (job_type, json.dumps(payload or {}), max_attempts,
-                 iso(run_after) or now, dedupe_key, now, now),
+                 iso(run_after) or now, dedupe_key, now, now, priority),
             )
             return int(cur.lastrowid)
         except Exception:
@@ -465,7 +466,7 @@ class JobsRepo:
     def claim_due(self, now: datetime, limit: int = 5) -> list[dict[str, Any]]:
         with self.db.tx() as conn:
             rows = conn.execute(
-                "SELECT * FROM jobs WHERE status='pending' AND run_after<=? ORDER BY id LIMIT ?",
+                "SELECT * FROM jobs WHERE status='pending' AND run_after<=? ORDER BY priority DESC, id LIMIT ?",
                 (now.isoformat(timespec="seconds"), limit),
             ).fetchall()
             ids = [r["id"] for r in rows]

@@ -191,7 +191,8 @@ def _enqueue_platforms(db, settings, story_id, text, lifecycle):
             "publish_%s" % platform,
             {"story_id": story_id, "platform": platform, "payload_hash": ph,
              "text": text, "publication_id": pid},
-            dedupe_key="pub:%s:%s:%s" % (platform, story_id, ph[:16]))
+            dedupe_key="pub:%s:%s:%s" % (platform, story_id, ph[:16]),
+            priority=100 if lifecycle in ("PROVISIONAL", "CONFIRMED") else 60)
 
 def llm_budget_ok(db: Database, settings: Any) -> bool:
     """Cost guard: real LLM calls are recorded in llm_cache; cap them per minute/hour."""
