@@ -35,14 +35,19 @@ class SourcesRepo:
     def create(self, *, name: str, platform: str, url: str = "", external_id: str = "",
                language: str = "und", country: str = "", category: str = "general",
                source_type: str = "news_organization", status: str = "DISCOVERED",
-               priority: int = 50, polling_interval_min: int = 15, notes: str = "") -> int:
+               priority: int = 50, polling_interval_min: int = 15, notes: str = "",
+               verification_allowed: bool = False, source_role: str = "MAJOR_NEWSROOM",
+               can_increase_independent_count: bool = True) -> int:
         activated = utcnow() if status == "APPROVED" else None
         cur = self.db.execute(
             "INSERT INTO sources(name,platform,external_id,url,language,country,category,"
-            "source_type,status,enabled,priority,polling_interval_min,notes,created_at,activated_at)"
-            " VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)",
+            "source_type,status,enabled,priority,polling_interval_min,notes,created_at,activated_at,"
+            "verification_allowed,source_role,can_increase_independent_count)"
+            " VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?)",
             (name, platform, external_id, url, language, country, category,
-             source_type, status, priority, polling_interval_min, notes, utcnow(), activated),
+             source_type, status, priority, polling_interval_min, notes, utcnow(), activated,
+             1 if verification_allowed else 0, source_role,
+             1 if can_increase_independent_count else 0),
         )
         return int(cur.lastrowid)
 
@@ -56,7 +61,8 @@ class SourcesRepo:
 
     def update(self, source_id: int, **fields: Any) -> None:
         allowed = {"name", "url", "external_id", "language", "country", "category",
-                   "source_type", "priority", "polling_interval_min", "notes", "enabled"}
+                   "source_type", "priority", "polling_interval_min", "notes", "enabled",
+                   "verification_allowed", "source_role", "can_increase_independent_count"}
         sets, params = [], []
         for k, v in fields.items():
             if k in allowed:
@@ -238,9 +244,19 @@ class EventsRepo:
 
     def recompute(self, event_id: int) -> dict[str, Any]:
         items = self.items(event_id)
-        # report_count counts EVERY report (spec §120: 5 copies → report_count=5);
-        # independence collapses copied/forwarded origins via lineage_key.
-        lineages = {i["lineage_key"] or f"src:{i['source_id']}" for i in items}
+        # report_count counts EVERY report; independence counts only sources whose
+        # origin spread is real (aggregators flagged can_increase=0 never add).
+        flags = {
+            r["id"]: r
+            for r in self.db.query(
+                "SELECT id, can_increase_independent_count FROM sources"
+            )
+        }
+        lineages = {
+            i["lineage_key"] or f"src:{i['source_id']}"
+            for i in items
+            if flags.get(i["source_id"], {}).get("can_increase_independent_count", 1)
+        }
         langs = sorted({i["language"] for i in items if i["language"] != "und"})
         independent = len(lineages)
         stamps = [(i["published_at"] or i["fetched_at"]) for i in items] or [utcnow()]

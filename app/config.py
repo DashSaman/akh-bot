@@ -39,6 +39,8 @@ class Settings(BaseSettings):
 
     max_posts_per_hour: int = 12
     max_posts_per_day: int = 120
+    max_llm_calls_per_minute: int = 30
+    max_llm_calls_per_hour: int = 500
 
     @property
     def db_path(self) -> str:

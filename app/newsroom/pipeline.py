@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.brand import Brand
@@ -48,24 +49,27 @@ def ingest_classify_and_cluster(db: Database, item: dict[str, Any]) -> dict[str,
             "duplicate_stage": dup.stage, **stats}
 
 
-def build_claim_evidence(event: dict[str, Any], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Group reports into (claim-text → sources) from item text without an LLM:
-    headline-level union of report positions keyed by exact line similarity.
+def build_claim_evidence(event: dict[str, Any], items: list[dict[str, Any]],
+                         verification_flags: dict[int, int] | None = None) -> list[dict[str, Any]]:
+    """Group reports into (claim-text → origins) from item text without an LLM.
 
-    The LLM refines this into atomic claims; this baseline guarantees the pipeline
-    works (conservatively, UNVERIFIED) even when the LLM is offline.
+    TRUST RULE: only sources the OWNER approved for verification
+    (verification_allowed=1) contribute independent VERIFICATION origins.
+    Independence is governed by LINEAGE (forward/canonical-origin collapse),
+    not by the duplicate flag — two outlets legitimately share one event.
     """
-    reports = [i for i in items if not i["is_duplicate"] and i["activation_ok"]]
+    reports = [i for i in items if i["activation_ok"]]
     by_key: dict[str, dict[str, Any]] = {}
     for i in reports:
         key_lines = [ln.strip() for ln in (i["title"] + "\n" + i["text"]).splitlines() if 25 < len(ln.strip()) < 300]
         for ln in key_lines[:5]:
             k = sha256_hex(ln)[:16]
-            slot = by_key.setdefault(k, {"text": ln, "sources": set(), "items": []})
-            slot["sources"].add(i["lineage_key"] or f"src:{i['source_id']}")
+            slot = by_key.setdefault(k, {"text": ln, "trusted": set(), "items": []})
+            if (verification_flags or {}).get(i["source_id"], 0):
+                slot["trusted"].add(i["lineage_key"] or f"src:{i['source_id']}")
             slot["items"].append({"item_id": i["id"], "source_id": i["source_id"], "quote": ln[:200]})
     return [
-        {"text": v["text"], "supporting": v["items"], "independent": len(v["sources"])}
+        {"text": v["text"], "supporting": v["items"], "independent": len(v["trusted"])}
         for v in by_key.values()
     ]
 
@@ -146,6 +150,23 @@ def merge_and_verify_claims(db: Database, event_id: int,
     return claims_repo.for_event(event_id)
 
 
+def llm_budget_ok(db: Database, settings: Any) -> bool:
+    """Cost guard: real LLM calls are recorded in llm_cache; cap them per minute/hour."""
+    if settings is None:
+        return True
+    now = datetime.now(timezone.utc)
+    for seconds, limit in ((60, getattr(settings, "max_llm_calls_per_minute", 30)),
+                           (3600, getattr(settings, "max_llm_calls_per_hour", 500))):
+        if limit <= 0:
+            continue
+        cutoff = (now - timedelta(seconds=seconds)).isoformat(timespec="seconds")
+        n = db.query_one("SELECT COUNT(*) c FROM llm_cache WHERE created_at>=?", (cutoff,))["c"]
+        if n >= limit:
+            log.warning("llm budget exceeded: %s calls in %ss (limit %s)", n, seconds, limit)
+            return False
+    return True
+
+
 async def process_new_items(db: Database, provider: LLMProvider | None,
                             brand: Brand, settings: Any) -> dict[str, Any]:
     """One pipeline pass over NEW items. Idempotent; safe to re-run."""
@@ -167,6 +188,10 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
     summary["new_events"] = len(summary["new_events"])
 
     # events with fresh eligible reports → claims → gates → writer
+    verification_flags = {
+        s["id"]: s["verification_allowed"] for s in SourcesRepo(db).list()
+    }
+    llm_allowed = provider is not None and llm_budget_ok(db, settings)
     for event in events_repo.list(limit=50):
         if event["status"] not in ("NEW", "CLUSTERED", "READY"):
             continue
@@ -176,9 +201,9 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
         eligible = [i for i in event_items if i["activation_ok"]]
         if not eligible:
             continue
-        baseline = build_claim_evidence(event, event_items)
+        baseline = build_claim_evidence(event, event_items, verification_flags)
         llm_claims: list[str] | None = None
-        if provider is not None:
+        if provider is not None and llm_allowed:
             try:
                 llm_claims = await llm_extract_claims(provider, event, event_items)
             except Exception as e:  # noqa: BLE001 — LLM outage must not stop collection
@@ -190,8 +215,8 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
             events_repo.set_status(event["id"], "HELD", "CONFLICTING" if reason == "CONFLICTING_CLAIMS" else "SINGLE_SOURCE")
             log.info("event %s held: %s", event["id"], reason, extra={"event_id": event["id"]})
             continue
-        if provider is None:
-            events_repo.set_status(event["id"], "READY")  # waiting for LLM config
+        if provider is None or not llm_allowed:
+            events_repo.set_status(event["id"], "READY")  # waiting for LLM config/budget
             continue
 
         from app.newsroom.models import WRITER_SYSTEM
@@ -200,6 +225,7 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
             (i["lineage_key"] or f"src:{i['source_id']}"): {
                 "source_id": i["source_id"], "name": "", "platform": i["platform"],
                 "language": i["language"],
+                "verification_allowed": bool(verification_flags.get(i["source_id"], 0)),
             }
             for i in eligible
         }

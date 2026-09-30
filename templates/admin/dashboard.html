@@ -3,11 +3,13 @@
 {% block content %}
 <h1>داشبورد</h1>
 <section class="stat-grid">
-  <div class="stat"><b>{{ stats.sources_approved }}</b><span>منبع تأییدشده (از {{ stats.sources_total }})</span></div>
+  <div class="stat"><b>{{ stats.sources_approved }}</b><span>منبع در گردآوری (فنی)</span></div>
+  <div class="stat"><b>{{ stats.sources_verification_approved }}</b><span>منبع تأییدشده راستی‌آزمایی (مالک)</span></div>
   <div class="stat"><b>{{ stats.items }}</b><span>ماده خام</span></div>
   <div class="stat"><b>{{ stats.events }}</b><span>رویداد</span></div>
   <div class="stat"><b>{{ stats.stories }}</b><span>خبر تولیدشده</span></div>
   <div class="stat"><b>{{ stats.publications_sent }}</b><span>انتشار موفق</span></div>
+  <div class="stat"><b>{{ stats.llm_calls_today }}</b><span>فراخوانی LLM امروز</span></div>
   <div class="stat"><b>{{ stats.jobs_failed }}</b><span>کار شکست‌خورده</span></div>
 </section>
 

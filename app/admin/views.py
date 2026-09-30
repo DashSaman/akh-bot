@@ -132,11 +132,14 @@ async def dashboard(request: Request):
     stats = {
         "sources_total": len(sources),
         "sources_approved": sum(1 for s in sources if s["status"] == "APPROVED"),
+        "sources_verification_approved": sum(1 for s in sources if s.get("verification_allowed")),
         "items": db.query_one("SELECT COUNT(*) c FROM raw_items")["c"],
         "events": db.query_one("SELECT COUNT(*) c FROM events")["c"],
         "stories": db.query_one("SELECT COUNT(*) c FROM stories")["c"],
         "publications_sent": db.query_one("SELECT COUNT(*) c FROM publications WHERE status='SENT'")["c"],
         "jobs_failed": db.query_one("SELECT COUNT(*) c FROM jobs WHERE status='failed'")["c"],
+        "llm_calls_today": db.query_one(
+            "SELECT COUNT(*) c FROM llm_cache WHERE created_at>=date('now')")["c"],
     }
     s = request.app.state.settings
     repo = SettingsRepo(db)
@@ -181,13 +184,38 @@ async def source_create(request: Request, name: str = Form(...), platform: str =
                         language: str = Form("fa"), country: str = Form(""),
                         category: str = Form("general"), source_type: str = Form("news_organization"),
                         status: str = Form("DISCOVERED"), polling_interval_min: int = Form(15),
+                        source_role: str = Form("MAJOR_NEWSROOM"),
+                        verification_allowed: str = Form(""),
+                        can_increase_independent_count: str = Form(""),
                         csrf: str = Form("")):
     if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
         return r or c
+    if source_role not in ("OFFICIAL_PRIMARY", "MAJOR_NEWSROOM", "JOURNALIST", "LOCAL_SOURCE", "AGGREGATOR"):
+        source_role = "MAJOR_NEWSROOM"
     SourcesRepo(_db(request)).create(
         name=name, platform=platform, url=url, external_id=external_id, language=language,
         country=country, category=category, source_type=source_type, status=status,
         polling_interval_min=max(1, polling_interval_min),
+        source_role=source_role,
+        verification_allowed=verification_allowed == "on",
+        can_increase_independent_count=(can_increase_independent_count == "on"
+                                        and source_role != "AGGREGATOR"),
+    )
+    return RedirectResponse("/admin/sources", status_code=303)
+
+
+@router.post("/sources/{source_id}/trust")
+async def source_set_trust(request: Request, source_id: int,
+                           verification_allowed: str = Form(""),
+                           can_increase_independent_count: str = Form(""),
+                           csrf: str = Form("")):
+    """Owner-granted verification trust — separate from ingestion status."""
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    SourcesRepo(_db(request)).update(
+        source_id,
+        verification_allowed=1 if verification_allowed == "on" else 0,
+        can_increase_independent_count=1 if can_increase_independent_count == "on" else 0,
     )
     return RedirectResponse("/admin/sources", status_code=303)
 

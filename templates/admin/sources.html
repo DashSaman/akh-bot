@@ -25,20 +25,33 @@
     </select>
   </label>
   <label>وضعیت اولیه
-    <select name="status"><option value="DISCOVERED">DISCOVERED (غیرمطمئن)</option><option value="APPROVED">APPROVED (تأیید)</option></select>
+    <select name="status"><option value="DISCOVERED">DISCOVERED (غیرمطمئن)</option><option value="APPROVED">APPROVED (تأیید گردآوری)</option></select>
   </label>
+  <label>نقش منبع
+    <select name="source_role">
+      <option value="OFFICIAL_PRIMARY">OFFICIAL_PRIMARY — خاستگاه رسمی</option>
+      <option value="MAJOR_NEWSROOM" selected>MAJOR_NEWSROOM — رسانه بزرگ</option>
+      <option value="JOURNALIST">JOURNALIST — خبرنگار</option>
+      <option value="LOCAL_SOURCE">LOCAL_SOURCE — منبع محلی</option>
+      <option value="AGGREGATOR">AGGREGATOR — تجمیع‌کننده</option>
+    </select>
+  </label>
+  <label class="checkbox-line"><input type="checkbox" name="verification_allowed"> راستی‌آزمایی: تأیید مالک (verification)</label>
+  <label class="checkbox-line"><input type="checkbox" name="can_increase_independent_count" checked> افزایش شمار خاستگاه مستقل</label>
   <label>فاصله نظرسنجی (دقیقه) <input name="polling_interval_min" type="number" value="15" min="1"></label>
   <button type="submit">افزودن</button>
 </form>
 
 <h2>فهرست منابع</h2>
+<p class="small">جمع‌آوری (APPROVED) فقط یعنی «فعال فنی»؛ اعتماد راستی‌آزمایی جداگانه و توسط مالک تأیید می‌شود (TECHNICALLY_ENABLED ≠ EDITORIALLY_APPROVED).</p>
 <table>
-  <tr><th>شناسه</th><th>نام</th><th>پلتفرم</th><th>وضعیت</th><th>فعال</th><th>سلامت</th><th>آخرین موفقیت</th><th>عملیات</th></tr>
+  <tr><th>شناسه</th><th>نام</th><th>پلتفرم</th><th>نقش</th><th>گردآوری</th><th>راستی‌آزمایی (مالک)</th><th>فعال</th><th>سلامت</th><th>آخرین موفقیت</th><th>عملیات</th></tr>
   {% for s in sources %}
   <tr>
     <td>{{ s.id }}</td>
     <td>{{ s.name }}<div class="small">{{ s.url or s.external_id }}</div></td>
     <td>{{ s.platform }}</td>
+    <td class="small">{{ s.source_role }}</td>
     <td>
       <form method="post" action="/admin/sources/{{ s.id }}/status" class="inline-form">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -49,6 +62,13 @@
         </select>
       </form>
       <div class="small">فعال‌سازی: {{ s.activated_at or '—' }}</div>
+    </td>
+    <td>
+      <form method="post" action="/admin/sources/{{ s.id }}/trust" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <label class="checkbox-line"><input type="checkbox" name="verification_allowed" {% if s.verification_allowed %}checked{% endif %} onchange="this.form.submit()"> OWNER_APPROVED</label>
+        <label class="checkbox-line"><input type="checkbox" name="can_increase_independent_count" {% if s.can_increase_independent_count %}checked{% endif %} onchange="this.form.submit()"> independent++</label>
+      </form>
     </td>
     <td>{{ 'روشن' if s.enabled else 'خاموش' }}</td>
     <td>{{ '%.2f' | format(s.health_score) }}</td>
