@@ -2,6 +2,8 @@
 
 ## akh-bot — تحریریه خودکار مبتنی بر شواهد (نام داخلی؛ برند عمومی: تعیین‌نشده)
 
+[![CI](https://github.com/DashSaman/akh-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DashSaman/akh-bot/actions/workflows/ci.yml)
+
 پلتفرم سبک خبری چندزبانه که فقط منابع تأییدشده مدیر را رصد می‌کند:
 
 ```
