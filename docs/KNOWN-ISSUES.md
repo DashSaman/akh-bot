@@ -9,4 +9,3 @@
 - Velocity metric is a 1-hour approximation, not a rolling window.
 - Admin login throttle is per-process in-memory (single-container deployment: fine;
   revisit if workers > 1).
-- `docs/images/` real screenshots pending first UI access via tunnel.
