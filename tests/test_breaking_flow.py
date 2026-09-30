@@ -33,8 +33,8 @@ def test_public_copy_hides_external_sources_and_adds_own_signature():
     body = "متن خبر بر اساس گزارش منتشرشده.\n\n📖 منبع: t.me/withyashar\nhttps://bbc.com/x — @somechannel"
     text = build_public_text("PROVISIONAL", body, Brand(), "hidden", True)
     assert "🔴 در حال راستی‌آزمایی" in text
-    assert "🆔 @RastehNews" in text and "
-راسته؟" not in text  # footer = handle ONLY
+    assert "🆔 @RastehNews" in text
+    assert "راسته؟" not in text.split("🆔")[-1]  # footer = handle ONLY
     assert "t.me/" not in text and "bbc.com" not in text and "@somechannel" not in text
     assert "منبع:" not in text
     assert "بر اساس گزارش منتشرشده" in text  # attribution words preserved
