@@ -57,3 +57,22 @@
 
 ## Resources at idle+worker (see RESOURCE-BASELINE.md)
 RAM 45.9 MiB · CPU ≤0.31% · DB ~36 KB.
+
+## 2026-09-30 (session 3 — deployment hygiene + E2E staging readiness)
+
+- **brand overwrite fixed:** deploy.sh now creates `config/brand.yml` once and never
+  overwrites it (regression tests in tests/test_deploy_scripts.py; verified live:
+  server deploy printed "preserved existing config/brand.yml").
+- **GIT_SHA baked into image** (`AKHBOT_GIT_SHA`) → doctor reports the true deployed
+  commit; `doctor.sh --check-drift` compares code equivalence (docs-only deltas OK).
+- **CI added:** .github/workflows/ci.yml (pytest + compileall + docker build; offline,
+  no secrets, never touches production). Badge in README.
+- **Dashboard statuses now truthful:** LIVE_VERIFIED / TESTED / BLOCKED_EXTERNAL /
+  ERROR / WAITING_FOR_CREDENTIALS / NOT_CONFIGURED (tested).
+- **doctor.sh + check_parity.sh:** 11/11 parity PASS on production (port/restart/
+  network/volume/logging/healthcheck/DATA_DIR ↔ compose).
+- **GLM + Telegram staging: BLOCKED_EXTERNAL** — no credentials in /opt/akhbot/.env
+  (verified masked). `verify_integrations.py` runbook ready (reports model/HTTP/
+  latency only). Runbook documented in OPERATIONS.md.
+- **Existing services unaffected** (Apache 200, both other containers up, RAM 2.2Gi
+  available before and after; full before/after captured).

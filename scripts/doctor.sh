@@ -61,9 +61,16 @@ line "Telegram pub creds in .env" "$([ "${TG_SET:-0}" -ge 1 ] && [ "${TG_TOT:-0}
 line "public base URL" "$(grep -E '^PUBLIC_BASE_URL=.+' /opt/akhbot/.env | sed 's/PUBLIC_BASE_URL=//' | grep . || echo '(empty → preview/noindex)')"
 
 if [ "${1:-}" = "--check-drift" ]; then
-  if [ "$REPO_HEAD" != "$DEPLOYED_HEAD" ]; then
-    echo "DRIFT: repository $REPO_HEAD != deployed $DEPLOYED_HEAD"
-    exit 1
+  if [ "$REPO_HEAD" = "$DEPLOYED_HEAD" ]; then
+    echo "OK: repository and deployed HEAD match ($REPO_HEAD)"
+    exit 0
   fi
-  echo "OK: repository and deployed HEAD match ($REPO_HEAD)"
+  CODE_DIFF=$(git -C "$APP" diff --name-only "$DEPLOYED_HEAD" "$REPO_HEAD" \
+    -- app scripts config templates static Dockerfile docker-compose.yml requirements.txt 2>/dev/null | wc -l)
+  if [ "${CODE_DIFF:-1}" -eq 0 ]; then
+    echo "OK: docs-only delta (repo $REPO_HEAD, image $DEPLOYED_HEAD — code identical)"
+    exit 0
+  fi
+  echo "DRIFT: repository $REPO_HEAD vs deployed $DEPLOYED_HEAD WITH code changes — redeploy"
+  exit 1
 fi

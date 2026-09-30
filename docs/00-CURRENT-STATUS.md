@@ -2,9 +2,10 @@
 
 # وضعیت جاری پروژه (منبع حقیقت برای نشست‌های بعدی)
 
-- **فاز:** ۳ تا ۹ + استقرار + تست E2E مرورگری کامل + چرخش اعتبارنامه مدیر
-- **آخرین کامیت مخزن:** `a73ec0d` (تأییدشده 2026-09-30)
-- **کامیت مستقرشده روی سرور:** `a73ec0d` (یکسان — تأیید در POST-DEPLOY-CHECK.md)
+- **فاز:** بهداشت استقرار کامل + آماده‌سازی E2E (GLM/تلگرام: BLOCKED_EXTERNAL)
+- **جفت کامیت مخزن/ایمیج:** با `scripts/doctor.sh --check-drift` بگیرید (delta فقط-مستندات مجاز است)
+- **وضعیت اجزا:** جمع‌آور RSS=LIVE_VERIFIED · نویسنده GLM=BLOCKED_EXTERNAL (بدون کلید) · ناشر تلگرام=BLOCKED_EXTERNAL · جمع‌آور تلگرام=WAITING_FOR_CREDENTIALS · X/IG/Threads=NOT_CONFIGURED · برند=UNDECIDED · ایندکس=PREVIEW(NOINDEX)
+- **CI:** GitHub Actions (تست آفلاین + بیلد داکر) — بدون رمز، بدون تماس با سرور تولیدی
 - **مسیر سرور:** `/opt/akhbot/` (اپ: `/opt/akhbot/app`، env: `/opt/akhbot/.env`)
 - **پورت:** `127.0.0.1:8307` روی سرور — دسترسی توسعه با تونل SSH (پورت محلی 18307)
 - **پروژه داکر:** کانتینر `akhbot-app`، شبکه `akhbot_internal`، والیوم `akhbot_data`
@@ -30,9 +31,10 @@
 
 # Current Status (source of truth for future sessions)
 
-- **Phase:** 3–9 + deployment + full browser E2E + admin credential rotation
-- **Latest commit:** `a73ec0d` · **Deployed commit:** `a73ec0d` (identical, verified 2026-09-30). Compare `git log -1` locally with
-  `cd /opt/akhbot/app && git rev-parse HEAD` on the server — this file is updated per
+- **Phase:** deployment hygiene complete + E2E staging prepared (GLM/Telegram: BLOCKED_EXTERNAL)
+- **Heads pair:** via `scripts/doctor.sh --check-drift` (docs-only deltas explicitly allowed)
+- **Component states:** RSS=LIVE_VERIFIED · GLM writer=BLOCKED_EXTERNAL · Telegram publisher=BLOCKED_EXTERNAL · Telegram collector=WAITING_FOR_CREDENTIALS · X/IG/Threads=NOT_CONFIGURED · brand=UNDECIDED · indexing=PREVIEW(NOINDEX)
+- **CI:** GitHub Actions (offline tests + Docker build) — no secrets, no production contact
   cycle; POST-DEPLOY-CHECK.md records the verified pair.
 - **Server path:** `/opt/akhbot/` (app `/opt/akhbot/app`, env `/opt/akhbot/.env`)
 - **Port:** `127.0.0.1:8307` ON THE SERVER — development access ONLY via SSH tunnel
