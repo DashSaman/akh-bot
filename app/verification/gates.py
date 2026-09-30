@@ -58,3 +58,24 @@ def event_can_auto_publish(claims: list[dict[str, Any]]) -> tuple[bool, str]:
     if high_risk_single:
         return False, "HIGH_RISK_SINGLE_SOURCE"
     return True, "OK"
+
+
+_TOPIC_WEIGHTS = {
+    "WAR_MILITARY": (100, ["جنگ", "حمله موشکی", "پهپاد", "نظامی", "بمبار", "تحریم نظامی", "missile", "strike", "military"]),
+    "INTERNET": (95, ["اینترنت", "فیلترینگ", "قطعی اینترنت", "اتصال", "پهنای باند", "internet", "shutdown", "filternet"]),
+    "CURRENCY": (90, ["دلار", "ارز", "تومان", "طلا", "سکه", "بورس", "dollar", "currency", "gold", "fx"]),
+    "DIPLOMACY": (85, ["دیپلماس", "مذاکره", "وزیر خارجه", "سفیر", "diplomat", "talks"]),
+    "IRAN_MAJOR": (85, ["ایران", "تهران", "مجلس", "رئیس‌جمهور", "آیت‌الله"]),
+    "ECONOMY": (75, ["اقتصاد", "نفتی", "بازار", "تورم", "economy", "oil"]),
+    "TECH": (60, ["فناوری", "هوش مصنوعی", "تراشه", "ai", "chip", "tech"]),
+}
+
+
+def classify_priority(text: str) -> tuple[str, int]:
+    """Topic weight → queue priority. Affects ORDER, never drops the item."""
+    best_topic, best_w = "GENERAL_IMPORTANT", 50
+    t = (text or "").lower()
+    for topic, (w, kws) in _TOPIC_WEIGHTS.items():
+        if any(k in t for k in kws) and w > best_w:
+            best_topic, best_w = topic, w
+    return best_topic, best_w

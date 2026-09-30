@@ -42,6 +42,15 @@ class Settings(BaseSettings):
     telegram_ingest_session: str = ""
 
     workers_enabled: bool = True
+    autonomous_mode: bool = True
+    global_source_sweep_seconds: int = 120
+    verify_recheck_interval_seconds: int = 300
+    verifying_deadline_minutes: int = 60
+    orphan_raw_item_seconds: int = 120
+    media_cleanup_interval_seconds: int = 300
+    media_cache_max_mb: int = 512
+    disk_critical_percent: int = 85
+    max_source_video_mb: int = 50
     ingest_interval_seconds: int = 300
     pipeline_interval_seconds: int = 60
     jobs_interval_seconds: int = 10

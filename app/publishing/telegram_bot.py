@@ -23,6 +23,7 @@ STATUS_ICONS = {
     "CONFLICTING": "🟠 گزارش‌های متناقض",
     "RETRACTED": "❌ تکذیب شد",
     "UNCONFIRMED_UPDATE": "⚠️ گزارش اولیه تأیید نشد",
+    "UNVERIFIED_EXPIRED": "⚠️ تا این لحظه تأیید مستقل نشد",
 }
 
 

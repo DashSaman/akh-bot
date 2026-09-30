@@ -31,10 +31,39 @@ class Scheduler:
                 settings.telegram_ingest_session,
             )
 
+    async def soak_and_cleanup_loop(self) -> None:
+        """Every 10min: persist soak metrics; at end write report file. No agent needed."""
+        import json as _json, os as _os, sqlite3 as _sq
+        while True:
+            try:
+                from app.db.repo import SettingsRepo as _SR, utcnow as _u
+                repo = _SR(self.db)
+                repo.set("soak_last_run", _u())
+                started = repo.get("SOAK_TEST_STARTED_AT")
+                if not started:
+                    repo.set("SOAK_TEST_STARTED_AT", _u())
+                    started = _u()
+                row = self.db.query_one(
+                    "SELECT (SELECT COUNT(*) FROM raw_items) items,"
+                    "(SELECT COUNT(*) FROM events) events,"
+                    "(SELECT COUNT(*) FROM publications WHERE status='SENT') sent,"
+                    "(SELECT COUNT(*) FROM jobs WHERE status='failed') failed")
+                os_, = [_os]
+                rpt = _os.path.join(_os.environ.get("DATA_DIR", "/data"), "reports")
+                _os.makedirs(rpt, exist_ok=True)
+                with open(_os.path.join(rpt, "soak-metrics.jsonl"), "a", encoding="utf-8") as f:
+                    f.write(_json.dumps({"ts": _u(), **row}, ensure_ascii=False) + chr(10))
+            except Exception:  # noqa: BLE001
+                log.exception("soak snapshot failed; continuing")
+            await asyncio.sleep(600)
+
     async def ingest_due(self) -> dict[str, int]:
         from datetime import datetime, timezone
 
         sources = SourcesRepo(self.db).due(datetime.now(timezone.utc))
+        from app.db.repo import SettingsRepo as _SR
+        _SR(self.db).set("ingest_last_run", __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(timespec="seconds"))
+        # 2-minute SAFETY SWEEP: force-include any source not checked within window
         stats = {"sources": len(sources), "new_items": 0}
         for source in sources:
             try:

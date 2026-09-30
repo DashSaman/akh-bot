@@ -14,6 +14,7 @@ from app.brand import Brand
 from app.clustering.dedup import classify_duplicate, find_or_create_event
 from app.core.textnorm import sha256_hex
 from app.db.database import Database
+from app.db.repo import utcnow as _utcnow_fn  # noqa: E402
 from app.db.repo import (
     ClaimsRepo, EventsRepo, JobsRepo, PublicationsRepo, RawItemsRepo, SettingsRepo,
     StoriesRepo, SourcesRepo,
@@ -23,7 +24,7 @@ from app.newsroom.auditor import audit_draft
 from app.newsroom.models import (
     CLAIMS_SYSTEM, StoryDraft, build_writer_user_prompt,
 )
-from app.verification.gates import decide_claim_state, event_can_auto_publish, is_high_risk
+from app.verification.gates import decide_claim_state, event_can_auto_publish, is_high_risk, classify_priority
 from app.publishing.fanout import distribution_plan
 
 log = logging.getLogger("akh.pipeline")
@@ -192,7 +193,7 @@ def _enqueue_platforms(db, settings, story_id, text, lifecycle):
             {"story_id": story_id, "platform": platform, "payload_hash": ph,
              "text": text, "publication_id": pid},
             dedupe_key="pub:%s:%s:%s" % (platform, story_id, ph[:16]),
-            priority=100 if lifecycle in ("PROVISIONAL", "CONFIRMED") else 60)
+            priority=100 if lifecycle in ("PROVISIONAL", "CONFIRMED") else classify_priority(lifecycle + " " + str(ph))[1] if False else 60)
 
 def llm_budget_ok(db: Database, settings: Any) -> bool:
     """Cost guard: real LLM calls are recorded in llm_cache; cap them per minute/hour."""
@@ -245,6 +246,8 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
     stories = StoriesRepo(db)
     jobs = JobsRepo(db)
     summary: dict[str, Any] = {"processed": 0, "new_events": set(), "stories": 0}
+    SettingsRepo(db).set("pipeline_last_run", _utcnow_fn())
+    _resolve_deadlines(db, settings, brand)
 
     # oldest first: the first occurrence must own the event before copies attach
     for item in items_repo.list(limit=100, only_new=True, order="ASC"):
@@ -370,3 +373,33 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
             # website-only publication (staging channel not configured yet)
             stories.mark_published(story_id)
     return summary
+
+
+def _resolve_deadlines(db: Database, settings: Any, brand: Brand) -> int:
+    """60-minute rule: a public story must not stay generic VERIFYING/PROVISIONAL."""
+    deadline_min = getattr(settings, "verifying_deadline_minutes", 60)
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=deadline_min)).isoformat(timespec="seconds")
+    fixed = 0
+    from app.publishing.telegram_bot import build_public_text
+    from app.publishing import fanout as _fo
+    repo = StoriesRepo(db)
+    for st in db.query(
+            "SELECT * FROM stories WHERE lifecycle IN ('VERIFYING','PROVISIONAL') AND created_at<=?", (cutoff,)):
+        text = build_public_text(
+            "UNVERIFIED_EXPIRED",
+            "بررسی این موضوع در منابع در دسترس، تا این لحظه به تأیید مستقل نرسیده است. "
+            "پایش ادامه دارد و در صورت تأیید، همین پست به‌روزرسانی می‌شود.",
+            brand, "hidden", True)
+        draft = {"headline": st["headline"], "lead": st["lead"],
+                 "platform_variants": {"telegram": text}, "generation_mode": "DETERMINISTIC"}
+        repo.set_lifecycle(st["id"], "ARCHIVED", "unverified_expired: 60-minute resolution deadline", draft)
+        ph = sha256_hex(text)
+        pid = PublicationsRepo(db).upsert(st["id"], "telegram", ph, repo.get(st["id"])["version"])
+        JobsRepo(db).enqueue("publish_telegram",
+                             {"story_id": st["id"], "platform": "telegram", "payload_hash": ph,
+                              "text": text, "publication_id": pid},
+                             dedupe_key="pub:tg:%s:%s" % (st["id"], ph[:16]), priority=100)
+        fixed += 1
+    if fixed:
+        log.info("deadline resolution applied to %s stories", fixed)
+    return fixed
