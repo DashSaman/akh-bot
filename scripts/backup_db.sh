@@ -2,7 +2,7 @@
 # Online SQLite backup inside the akhbot-app container (safe under WAL) + retention.
 set -euo pipefail
 KEEP_DAYS="${KEEP_DAYS:-14}"
-docker exec akhbot-app python - <<'PY'
+docker exec -i akhbot-app python - <<'PY'
 import os, sqlite3, datetime
 src = os.path.join(os.environ.get("DATA_DIR", "/data"), "akhbot.db")
 backup_dir = os.path.join(os.environ.get("DATA_DIR", "/data"), "backups")

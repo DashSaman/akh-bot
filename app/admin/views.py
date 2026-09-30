@@ -41,11 +41,12 @@ def _current_user(request: Request) -> bool:
 def _ctx(request: Request, **extra: Any) -> dict[str, Any]:
     brand = request.app.state.brand
     settings = request.app.state.settings
+    csrf = extra.pop("csrf_token", None) or request.cookies.get(CSRF_COOKIE, "")
     return {
         "request": request,
         "brand": brand,
         "brand_status": brand.brand_status,
-        "csrf_token": request.cookies.get(CSRF_COOKIE, ""),
+        "csrf_token": csrf,
         "preview_mode": settings.preview_mode,
         **extra,
     }
@@ -59,11 +60,11 @@ async def require_login(request: Request) -> HTMLResponse | None:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_form(request: Request):
-    if not request.cookies.get(CSRF_COOKIE):
-        resp = templates.TemplateResponse(request, "admin/login.html", _ctx(request))
-        resp.set_cookie(CSRF_COOKIE, new_csrf_token(), httponly=False, samesite="lax")
-        return resp
-    return templates.TemplateResponse(request, "admin/login.html", _ctx(request))
+    # token must exist in BOTH the rendered form and the cookie on the very first GET
+    token = request.cookies.get(CSRF_COOKIE) or new_csrf_token()
+    resp = templates.TemplateResponse(request, "admin/login.html", _ctx(request, csrf_token=token))
+    resp.set_cookie(CSRF_COOKIE, token, httponly=False, samesite="lax")
+    return resp
 
 
 @router.post("/login")
