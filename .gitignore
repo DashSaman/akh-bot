@@ -1,0 +1,28 @@
+# secrets / runtime
+.env
+*.session
+*.session-journal
+data/
+*.db
+*.db-wal
+*.db-shm
+backups/
+*.log
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
