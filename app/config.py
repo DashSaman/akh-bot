@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     telegram_bot_token: str = ""
     telegram_staging_chat_id: str = ""
+    telegram_news_chat_id: str = ""   # production channel (e.g. @RastehNews); falls back to staging
     telegram_ingest_api_id: int = 0
     telegram_ingest_api_hash: str = ""
     telegram_ingest_session: str = ""

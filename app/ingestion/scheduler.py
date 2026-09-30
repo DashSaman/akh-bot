@@ -44,10 +44,14 @@ class Scheduler:
                     summary = await fetch_rss_source(source, self.db)
                     stats["new_items"] += summary.get("new", 0)
                 elif source["platform"] == "telegram":
-                    if self.ingestor is None:
-                        continue
-                    summary = await self.ingestor.reconcile_source(source, self.db)
-                    stats["new_items"] += summary.get("new", 0)
+                    if source.get("source_type") == "telegram_web_preview":
+                        from app.ingestion.telegram_web import fetch_telegram_web_source
+
+                        summary = await fetch_telegram_web_source(source, self.db)
+                        stats["new_items"] += summary.get("new", 0)
+                    elif self.ingestor is not None:
+                        summary = await self.ingestor.reconcile_source(source, self.db)
+                        stats["new_items"] += summary.get("new", 0)
             except Exception:  # noqa: BLE001 — source isolation
                 log.exception("source %s ingest failed", source["id"], extra={"source_id": source["id"]})
         return stats
