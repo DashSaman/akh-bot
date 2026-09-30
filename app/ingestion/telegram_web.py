@@ -68,17 +68,45 @@ async def fetch_telegram_web_source(source: dict[str, Any], db: Any, limit: int 
     handle = (source["external_id"] or source["url"].rstrip("/").split("/")[-1]).lstrip("@")
     summary: dict[str, Any] = {"source_id": source["id"], "handle": handle, "new": 0, "skipped": 0}
     try:
+        import json as _json
+        state = _json.loads(source.get("fetch_state") or "{}")
+        watermark = int(state.get("watermark") or 0)
+        pages, all_msgs, before = 0, [], None
         async with httpx.AsyncClient(timeout=25, follow_redirects=True,
                                      headers={"User-Agent": "Mozilla/5.0 (compatible; akhbot/0.1)"}) as client:
-            resp = await client.get(f"https://t.me/s/{handle}")
-        if resp.status_code != 200 or "tgme_widget_message" not in resp.text:
+            while pages < 3:
+                url = f"https://t.me/s/{handle}" + (f"?before={before}" if before else "")
+                resp = await client.get(url)
+                if resp.status_code != 200 or "tgme_widget_message" not in resp.text:
+                    break
+                msgs = parse_preview_page(resp.text)
+                if not msgs:
+                    break
+                all_msgs = msgs + all_msgs
+                pages += 1
+                oldest = int(msgs[0]["post"].split("/")[-1])
+                if watermark and oldest <= watermark:
+                    break
+                before = oldest
+                if len(msgs) < 5:
+                    break
+        resp_text_marker = True
+        msgs_all = all_msgs
+        max_id = max((int(m["post"].split("/")[-1]) for m in all_msgs), default=watermark)
+        if max_id > watermark:
+            state["watermark"] = max_id
+        if False:
             sources.mark_fetch(source["id"], False, f"preview unavailable: HTTP {resp.status_code}")
             summary["error"] = f"HTTP {resp.status_code}"
             return summary
         activated = parse_iso(source["activated_at"])
-        for msg in parse_preview_page(resp.text)[:limit]:
+        for msg in msgs_all[:limit]:
             external_key = f"tgweb:{msg['post']}"
+            mid_num = int(msg["post"].split("/")[-1])
             if items.exists(source["id"], external_key):
+                summary["skipped"] += 1
+                continue
+            if watermark and mid_num <= watermark:
                 summary["skipped"] += 1
                 continue
             published = parse_iso(msg["published"])
@@ -93,7 +121,7 @@ async def fetch_telegram_web_source(source: dict[str, Any], db: Any, limit: int 
                 activation_ok=activation_ok, fingerprints=fp,
             )
             summary["new"] += 1
-        sources.mark_fetch(source["id"], True)
+        sources.mark_fetch(source["id"], True, fetch_state=state)
         return summary
     except httpx.HTTPError as e:
         sources.mark_fetch(source["id"], False, f"transport: {e}"[:300])

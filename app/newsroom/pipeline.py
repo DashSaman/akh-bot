@@ -24,7 +24,8 @@ from app.newsroom.auditor import audit_draft
 from app.newsroom.models import (
     CLAIMS_SYSTEM, StoryDraft, build_writer_user_prompt,
 )
-from app.verification.gates import decide_claim_state, event_can_auto_publish, is_high_risk, classify_priority
+from app.verification.gates import (decide_claim_state, event_can_auto_publish, is_high_risk,
+                                    classify_priority, extract_headline, is_valid_headline)
 from app.publishing.fanout import distribution_plan
 
 log = logging.getLogger("akh.pipeline")
@@ -307,7 +308,13 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
             continue
         if provider is None or not llm_allowed:
             # DETERMINISTIC MODE: safe structured publication without any AI
+            headline = extract_headline(event["title"], det_body_of(summary_claims, event))
+            if not is_valid_headline(headline):
+                events_repo.set_status(event["id"], "HELD")
+                log.info("CONTENT_QUALITY_HOLD event %s", event["id"], extra={"event_id": event["id"]})
+                continue
             det = deterministic_story_text("CONFIRMED", event, summary_claims, eligible, source_roles)
+            det["body"] = "**" + headline + "**" + chr(10) + chr(10) + det["body"]
             story_id = _create_and_enqueue(db, settings, brand, event["id"], det)
             events_repo.set_status(event["id"], "PUBLISHED")
             summary["stories"] += 1
@@ -403,3 +410,9 @@ def _resolve_deadlines(db: Database, settings: Any, brand: Brand) -> int:
     if fixed:
         log.info("deadline resolution applied to %s stories", fixed)
     return fixed
+
+
+def det_body_of(claims, event):
+    main = next((c["text"] for c in claims if c["state"] in ("CONFIRMED", "CORROBORATED")),
+                claims[0]["text"] if claims else event["title"])
+    return main
