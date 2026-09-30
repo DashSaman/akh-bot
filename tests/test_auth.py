@@ -14,7 +14,9 @@ def test_login_logout_flow(admin_client):
     resp = admin_client.get("/admin")
     assert resp.status_code == 200
     assert "داشبورد" in resp.text
-    resp = admin_client.post("/admin/logout", follow_redirects=False)
+    resp = admin_client.post("/admin/logout",
+                             data={"csrf": admin_client.cookies.get("akh_csrf", "")},
+                             follow_redirects=False)
     assert resp.status_code == 303
     resp = admin_client.get("/admin", follow_redirects=False)
     assert resp.status_code == 303
