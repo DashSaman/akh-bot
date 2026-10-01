@@ -69,4 +69,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 37 · PARTIAL 12 · BROKEN 1 · MISSING 8 · BLOCKED_EXTERNAL 3 — total 61
+DONE 37 · PARTIAL 13 · BROKEN 0 · MISSING 8 · BLOCKED_EXTERNAL 3 — total 61
