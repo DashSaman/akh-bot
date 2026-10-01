@@ -103,10 +103,15 @@ def build_public_text(status, body, brand, source_mode="hidden",
     clean = strip_boilerplate(sanitize_public_copy(body, source_mode, brand))
     clean = dedup_paragraphs(clean)
     lines = clean.split(chr(10))
+    if lines and "راسته؟ |" in lines[0]:
+        lines = lines[1:]  # branding lives in the footer only
+    while lines and not lines[0].strip():
+        lines = lines[1:]
     if lines:
         first = lines[0].strip()
         bolded = first if first.startswith("**") else "**" + first + "**"
-        lines[0] = (icon + " " + bolded).strip() if icon else bolded
+        head = " ".join(x for x in (icon, topic_emoji(first), bolded) if x)
+        lines[0] = head
         clean = chr(10).join(lines)
     src = ("منبع: " + source_names) if source_names else ""
     sig = brand_signature(brand, signature_enabled)
@@ -246,3 +251,43 @@ def to_telegram_html(text: str) -> str:
         seg = _h.escape(seg)
         parts.append(("<b>%s</b>" % seg) if i % 2 == 1 else seg)
     return "".join(parts)
+
+
+_TOPIC_EMOJI = [
+    ("WAR_MILITARY", "\U0001F396"), ("INTERNET", "\U0001F310"), ("CURRENCY", "\U0001F4B5"),
+    ("DIPLOMACY", "\U0001F3DB"), ("IRAN_IRAQ", "\U0001F30D"), ("ECONOMY", "\U0001F4CA"),
+]
+
+
+def topic_emoji(text):
+    from app.verification.gates import classify_priority
+
+    topic, _ = classify_priority(text or "")
+    for name, e in _TOPIC_EMOJI:
+        if name == topic:
+            return e
+    return ""
+
+
+def _resembles(headline, body, threshold=0.65):
+    hset = set((headline or "").lower().split())
+    bset = set((body or "").lower().split())
+    if not hset:
+        return False
+    return len(hset & bset) / max(1, len(hset | bset)) >= threshold
+
+
+def body_quality_gate(headline, body):
+    """PUBLIC_BODY_QUALITY_GATE: no fragments/one-word/duplicate-of-headline bodies.
+    Returns (ok, mode) where mode in {"ok", "compact"} — compact = headline-only post."""
+    h = (headline or "").strip().strip("*").strip()
+    b = (body or "").strip()
+    if not h:
+        return False, "no headline"
+    if _resembles(h, b):
+        return True, "compact"
+    body_no_head = b.replace(h, "").strip()
+    words = [w for w in body_no_head.split() if len(w) > 1]
+    if len(words) < 4:
+        return False, "body too short/fragment"
+    return True, "ok"

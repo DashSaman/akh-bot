@@ -24,9 +24,10 @@ from app.newsroom.auditor import audit_draft
 from app.newsroom.models import (
     CLAIMS_SYSTEM, StoryDraft, build_writer_user_prompt,
 )
+from app.publishing.telegram_bot import topic_emoji
 from app.verification.gates import (decide_claim_state, event_can_auto_publish, is_high_risk,
                                     classify_priority, extract_headline, is_valid_headline)
-from app.publishing.telegram_bot import is_persian_public_text
+from app.publishing.telegram_bot import is_persian_public_text, body_quality_gate
 from app.publishing.fanout import distribution_plan
 
 log = logging.getLogger("akh.pipeline")
@@ -317,10 +318,21 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
                 log.info("CONTENT_QUALITY_HOLD event %s", event["id"], extra={"event_id": event["id"]})
                 continue
             det = deterministic_story_text("CONFIRMED", event, summary_claims, eligible, source_roles)
-            det["body"] = "**" + headline + "**" + chr(10) + chr(10) + det["body"]
+            ok_body, body_mode = body_quality_gate(headline, det["body"])
+            if not ok_body:
+                events_repo.set_status(event["id"], "HELD")
+                log.info("PUBLIC_BODY_QUALITY_GATE event %s", event["id"], extra={"event_id": event["id"]})
+                continue
+            if body_mode != "compact":
+                det["body"] = "**" + headline + "**" + chr(10) + chr(10) + det["body"]
             if not is_persian_public_text(det["body"]):
                 events_repo.set_status(event["id"], "HELD")
                 log.info("NEEDS_LANGUAGE_PROCESSING event %s", event["id"], extra={"event_id": event["id"]})
+                continue
+            topic, tw = classify_priority(det_body_of(summary_claims, event) + " " + event["title"])
+            if tw <= 20:
+                events_repo.set_status(event["id"], "HELD")
+                log.info("LOW_PUBLICATION_VALUE event %s (topic=%s)", event["id"], topic, extra={"event_id": event["id"]})
                 continue
             story_id = _create_and_enqueue(db, settings, brand, event["id"], det)
             events_repo.set_status(event["id"], "PUBLISHED")
