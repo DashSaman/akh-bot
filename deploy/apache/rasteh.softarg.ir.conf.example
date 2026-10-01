@@ -1,0 +1,51 @@
+# rasteh.softarg.ir — PRIVATE admin panel vhost (portable NON-SECRET example)
+# Server-specific live files (cert paths, htpasswd) are created on each server;
+# never commit real certs/credentials. Reproduce with certbot + htpasswd steps
+# from docs/MIGRATION.md.
+
+# --- port 80: ACME + redirect to HTTPS (created/managed by certbot --redirect) ---
+<VirtualHost *:80>
+    ServerName rasteh.softarg.ir
+    ProxyPreserveHost On
+    ProxyPass /.well-known/acme-challenge !
+    ProxyPass / http://127.0.0.1:8307/
+    ProxyPassReverse / http://127.0.0.1:8307/
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+</VirtualHost>
+
+# --- port 443 (after `certbot --apache -d rasteh.softarg.ir --redirect`) ---
+<VirtualHost *:443>
+    ServerName rasteh.softarg.ir
+    # SSL lines injected by certbot (SSLCertificateFile etc.)
+
+    RedirectMatch 301 ^/$ /admin          # private hostname serves admin only
+
+    ProxyPreserveHost On
+    RequestHeader set X-Forwarded-Proto "https"
+    ProxyPass /.well-known/acme-challenge !
+    ProxyPass / http://127.0.0.1:8307/
+    ProxyPassReverse / http://127.0.0.1:8307/
+
+    # FIRST auth layer (outer); app login remains the SECOND layer
+    <Location />
+        AuthType Basic
+        AuthName "Rasteh Private"
+        AuthUserFile /etc/apache2/akhbot/rasteh.htpasswd   # server-side, never in Git
+        Require valid-user
+    </Location>
+    <Location /.well-known/acme-challenge>
+        Require all granted
+    </Location>
+
+    Header always set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "no-referrer"
+    Header always set X-Frame-Options "DENY"
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+    # After HTTPS proven stable, optionally add:
+    # Header always set Strict-Transport-Security "max-age=63072000"
+</VirtualHost>
+
+# Requirements: a2enmod proxy proxy_http headers ssl rewrite; backend MUST stay
+# bound to 127.0.0.1:8307 (never public). Cloudflare currently DNS-only; when
+# proxy is enabled later use SSL mode Full(strict) and keep this origin cert.
