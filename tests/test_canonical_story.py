@@ -146,3 +146,15 @@ def test_unresolvable_source_holds_not_silent(db):
     names = source_display_names(db, ev["id"])
     if not names:  # resolver must not return empty for eligible evidence
         assert StoriesRepo(db).by_event(ev["id"]) is None, "published without attribution"
+
+
+def test_gate11_old_ledger_is_historical_not_invariant():
+    """GATE-11 applies to the canonical render path (new publications). Historic
+    SENT rows predating the gate are preserved evidence, never mass-edited
+    (Part-1 rule §10). This test pins that policy decision."""
+    from app.publishing.telegram_bot import build_public_text
+
+    # a NEW render with known sources must carry exactly one attribution
+    text = build_public_text("CONFIRMED", "**h**", type("B", (), {
+        "name_fa": "x", "telegram_handle": "R"})(), "hidden", True, source_names="نایا")
+    assert text.count("منبع:") == 1

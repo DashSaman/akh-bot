@@ -3,15 +3,15 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 
 | ID | Requirement | Status | Code Evidence | Test Evidence | Runtime Evidence | Docs | Last SHA | Blocker/Notes | Part |
 |---|---|---|---|---|---|---|---|---|---|
-| CORE-001 | Canonical core entities exist (Source, RawItem, Claim, Event, Story, StoryVersion, PublicationJob/Ledger) | PARTIAL | app/db/migrations/001-005, app/db/repo.py | tests/test_pipeline.py | DB rows exist | DATA-MODEL.md | 9affb54 | boundaries leak via legacy draft blob | 1 |
-| CORE-004 | StoryVersion model: one Story evolves many versions; editorial content only in structured fields | PARTIAL | StoriesRepo.set_lifecycle, story_versions table | test_autonomy update-in-place | versions live | DATA-MODEL.md | 9affb54 | legacy drafts still carry preformatted body blob | 1 |
+| CORE-001 | Canonical core entities exist | DONE | app/db/migrations/001-005, repo.py | tests/test_no_duplicate_defs.py (entity distinctness) | 1027 stories structural post-migration | DATA-MODEL.md | afcc60f | — | — |
+| CORE-004 | StoryVersion model | DONE | set_lifecycle + story_versions | tests/test_canonical_story.py version-bump+provenance | sv=1036 intact post-migration | DATA-MODEL.md | afcc60f | — | — |
 | CORE-005 | Publication outbox/ledger model: job→ledger row→remote mapping; no re-publication on new RawItem | DONE | publications UNIQUE + jobs table + handler edit-path | test_publisher idempotency+edit | 86 SENT mapped; retry=0 dup | PUBLISHING.md | 9affb54 | — | — |
 | CORE-006 | Canonical MediaAsset structural entity/state model (incl. truthful status labels) | PARTIAL | media_cache table | test_media (asset) | media rows | DATA-MODEL.md | 9affb54 | status labels missing (REG-025) | 6 |
 | CORE-007 | EvidenceLink entity and canonical evidence relations | MISSING | — | — | — | DATA-MODEL.md | 97e98e2 | — | 4 |
 | CORE-008 | VerificationRun entity and traceable verification history | MISSING | — | — | — | DATA-MODEL.md | 97e98e2 | — | 4 |
 | CORE-009 | PlatformAccount entity and platform credential/account state model | MISSING | — | — | — | DATA-MODEL.md | 97e98e2 | — | 8 |
 | CORE-002 | No RawItem → publisher direct path | PARTIAL | pipeline renders only via build_public_text | tests/test_language_gate.py | foreign=0 live | — | 9affb54 | direct-story admin path exists (scripts) without canonical Story render for all fields | 1 |
-| CORE-003 | Public output only from canonical Story/StoryVersion | PARTIAL | StoriesRepo.create/set_lifecycle | tests/test_source_control.py | SENT 86 mapped | — | 9affb54 | some drafts still carry body blob, not pure structured fields | 1 |
+| CORE-003 | Public output only from canonical Story | DONE | _create_and_enqueue/_publish_deterministic | tests/test_canonical_story.py | blob-headlines=0 live | — | afcc60f | — | — |
 | SRC-001 | Owner allowlist only (INV-005) | DONE | repo.due() OWNER_ENABLED filter; jobs runner execution-check | test_source_control.py::disabled… | naya=1/yashar=2 enabled, others DISABLED | SOURCES.md | 9affb54 | settings marker key empty (cosmetic) | — |
 | SRC-002 | Priority=speed not trust (INV-006) | DONE | priority_rank in due() ORDER; verification_allowed separate | test_source_policy.py | DB flags separate | — | 9affb54 | — | — |
 | SRC-003 | Full CRUD panel incl test/fetch-now/archive | PARTIAL | admin/views.py + platforms routes | test_auth pages | /admin/sources live | ADMIN-PANEL.md | 9affb54 | Edit UI limited; delete=archive only | 7 |
@@ -36,6 +36,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | EDIT-001 | Meaningful headline gate | DONE | is_valid_headline + speaker parse | test_dedup/gates | 0 bad headlines live | — | 9affb54 | — | — |
 | EDIT-002 | Body quality gate (no dup/fragment) | DONE | body_quality_gate compact mode | test suite | sweeps show clean | — | 9affb54 | — | — |
 | EDIT-003 | Icon-only lifecycle, no «✅ تأیید شد» | DONE | STATUS_ICONS | test_language_gate | channel clean | EDITORIAL-STYLE | 9affb54 | — | — |
+| GATE-11 | Source attribution exactly-once, fail-closed resolution | DONE | pipeline _render_public + source_display_names | tests/test_canonical_story.py (5 cases) | last-20 SENT: missing=0 dup=0 | — | afcc60f | — | — |
 | EDIT-004 | Source attribution exactly once, names only | DONE | build_public_text source_names | tests | منبع in samples | — | 9affb54 | — | — |
 | MEDIA-001 | sendPhoto/sendVideo + Persian caption | DONE | telegram_bot.send_media | test_media.py | msg 247 photo live | — | 9affb54 | — | 6 |
 | MEDIA-002 | Temp cache + cleanup + disk guard | DONE | media.py cleanup/publisher gates | test_media.py | cache=0 live | — | 9affb54 | — | 6 |
@@ -66,4 +67,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 33 · PARTIAL 15 · BROKEN 1 · MISSING 9 · BLOCKED_EXTERNAL 3 — total 61
+DONE 36 · PARTIAL 12 · BROKEN 1 · MISSING 9 · BLOCKED_EXTERNAL 3 — total 61

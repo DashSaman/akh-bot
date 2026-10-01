@@ -24,11 +24,11 @@
 | REG-019 | existing-story update bypassed translation | update path lacked lang gate | INV-008 | existing-path foreign test | FIXED+TESTED |
 | REG-020 | legacy foreign queue payload sent | no send-time validation | INV-004 | pending purge + gate | FIXED+TESTED |
 | REG-021 | media caption bypass | caption unchecked | INV-004 | send_media gate test | FIXED+TESTED |
-| REG-022 | duplicate old class shadowed fix | file surgery leftovers | INV-024 | single-definition import test | FIXED (import dedupe) — needs permanent test | RISK |
+| REG-022 | duplicate old class shadowed fix | file surgery leftovers | INV-024 | tests/test_no_duplicate_defs.py (caught live dup persian_ratio) | FIXED+TESTED |
 | REG-023 | priority read as trust | conflated flags | INV-006 | separate-flags test | FIXED+TESTED |
 | REG-024 | allowlist not revalidated at execution | enqueue-only | INV-005 | execution recheck test | FIXED+TESTED |
 | REG-025 | branded card confused with original media | status labels | INV-024 | media-state labels (Part 6, CORE-006) | PARTIAL |
-| REG-026 | docs/runtime mismatch | stale docs | INV-024 | matrix sync | PARTIAL (this Part 0) |
+| REG-026 | docs/runtime mismatch | stale docs | INV-024 | governance validator in CI + evidence-sync task | FIXED+TESTED (Part-1 scope; validator permanent) |
 | REG-027 | PASS from tests w/o live evidence | reporting discipline | INV-023/024 | matrix runtime column | PARTIAL (matrix now enforces) |
 | REG-028 | same-event micro-post flood | every item → own event | INV-009/010 | burst-merge test | **OBSERVED (1020 events/2ch)** → Part 3 |
 | REG-029 | one interview → multiple posts | no claim clustering | INV-009 | interview-fixture test | OBSERVED (Yashar/TIME) → Part 3 |

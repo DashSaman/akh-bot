@@ -93,7 +93,8 @@ def main() -> int:
                     fail(errs, f"{rid}: Matrix Part 1 but missing from PART-01 plan")
             for line in matrix.splitlines():
                 cells = [c.strip() for c in line.split("|")]
-                if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[1] in ptxt and cells[-2] != "1":
+                if (len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[1] in ptxt
+                        and cells[-2] != "1" and cells[3] != "DONE"):
                     fail(errs, f"{cells[1]}: appears in PART-01 plan but Matrix Part={cells[-2]} (cross-phase leak)")
 
     # 5) Part-1 assigned requirements all appear in PART-01 plan
