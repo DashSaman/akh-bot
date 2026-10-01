@@ -30,7 +30,7 @@ def test_normal_confirmed_has_no_status_label():
 
 def test_provisional_keeps_label_and_clean_confirm_edits_it():
     prov = build_public_text("PROVISIONAL", "**تیتر**\n\nگزارش اولیه", B())
-    assert prov.startswith("🔴 در حال راستی‌آزمایی")
+    assert prov.startswith("🔴 **")
     conf = build_public_text("CONFIRMED", "**تیتر**\n\nمتن نهایی", B())
     assert not conf.startswith("🔴") and not conf.startswith("✅")  # clean conversion
 

@@ -16,15 +16,57 @@ log = logging.getLogger("akh.pub.telegram")
 _URL_RE = re.compile(r"(?:https?://\S+|www\.\S+|t\.me/\S+)")
 _SOURCE_LINE_RE = re.compile(r"^\s*(?:📖\s*)?(?:منبع|source)\s*[:：]", re.IGNORECASE)
 
-STATUS_ICONS = {
-    "PROVISIONAL": "🔴 در حال راستی‌آزمایی",
-    "CONFIRMED": "",  # ordinary confirmed news = clean post, no label clutter
-    "CONFIRMED_OFFICIAL": "📣 اعلام رسمی",
-    "CONFLICTING": "🟠 گزارش‌های متناقض",
-    "RETRACTED": "❌ اصلاح / تکذیب",
-    "UNCONFIRMED_UPDATE": "⚠️ گزارش اولیه تأیید نشد",
-    "UNVERIFIED_EXPIRED": "⚠️ تا این لحظه تأیید مستقل نشد",
+STATUS_ICONS = {  # ICON-ONLY lifecycle indicators (channel description explains)
+    "PROVISIONAL": "🔴",
+    "CONFIRMED": "🟢",
+    "CONFIRMED_OFFICIAL": "🟢",
+    "CONFLICTING": "🟠",
+    "RETRACTED": "❌",
+    "UNCONFIRMED_UPDATE": "⚠️",
+    "UNVERIFIED_EXPIRED": "⚠️",
 }
+
+_BOILERPLATE = (
+    "بر پایه گزارش‌های رسیده",
+    "این موارد از منابع تحت پایش راسته",
+    "بررسی منابع نشان می‌دهد",
+    "سامانه راستی‌آزمایی",
+    "مطابق بررسی سیستم",
+    "این اطلاعات تاکنون به‌طور مستقل تأیید نشده است",
+    "تأیید شد",
+)
+
+
+def _norm_block(t: str) -> set:
+    import re as _r
+    t = (t or "").replace("ي", "ی").replace("ك", "ک").replace("**", "")
+    t = _r.sub(r"[‌\s\W_]+", " ", t).strip().lower()
+    return set(t.split())
+
+
+def dedup_paragraphs(text: str, threshold: float = 0.6) -> str:
+    """PUBLIC_TEXT_DUPLICATION_GATE: drop later paragraphs that restate earlier ones."""
+    lines = text.split(chr(10))
+    out, seen_sets = [], []
+    for ln in lines:
+        toks = _norm_block(ln)
+        if len(toks) >= 6 and any(len(toks & p) / max(1, len(toks | p)) >= threshold for p in seen_sets):
+            continue
+        seen_sets.append(toks)
+        out.append(ln)
+    return chr(10).join(out)
+
+
+def strip_boilerplate(text: str) -> str:
+    lines = []
+    for ln in (text or "").split(chr(10)):
+        if any(b in ln for b in _BOILERPLATE) and len(ln) < 120:
+            continue
+        lines.append(ln)
+    s2 = chr(10).join(lines)
+    while chr(10) + chr(10) + chr(10) in s2:
+        s2 = s2.replace(chr(10) * 3, chr(10) * 2)
+    return s2.strip()
 
 
 def brand_signature(brand: Any, enabled: bool = True) -> str:
@@ -55,12 +97,31 @@ def sanitize_public_copy(text: str, mode: str = "hidden", brand: Any = None) -> 
     return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
 
 
-def build_public_text(status: str, body: str, brand: Any,
-                      source_mode: str = "hidden", signature_enabled: bool = True) -> str:
-    head = STATUS_ICONS.get(status, "")
-    clean = sanitize_public_copy(body, source_mode, brand)
+def build_public_text(status, body, brand, source_mode="hidden",
+                      signature_enabled=True, source_names=""):
+    icon = STATUS_ICONS.get(status, "")
+    clean = strip_boilerplate(sanitize_public_copy(body, source_mode, brand))
+    clean = dedup_paragraphs(clean)
+    lines = clean.split(chr(10))
+    if lines:
+        first = lines[0].strip()
+        bolded = first if first.startswith("**") else "**" + first + "**"
+        lines[0] = (icon + " " + bolded).strip() if icon else bolded
+        clean = chr(10).join(lines)
+    src = ("منبع: " + source_names) if source_names else ""
     sig = brand_signature(brand, signature_enabled)
-    return "\n\n".join(p for p in (head, clean, sig) if p)
+    parts = [p for p in (clean, src, sig) if p]
+    return (chr(10) + chr(10)).join(parts)
+
+
+def to_telegram_html(text: str) -> str:
+    """Convert our **bold** markers to <b>, escape everything else (no raw ** ever)."""
+    import html as _h
+    parts = []
+    for i, seg in enumerate((text or "").split("**")):
+        seg = _h.escape(seg)
+        parts.append(("<b>%s</b>" % seg) if i % 2 == 1 else seg)
+    return "".join(parts)
 
 
 class TelegramBotPublisher:
@@ -143,15 +204,6 @@ def telegram_text_for_story(draft: dict[str, Any], signature: str) -> str:
     if signature:
         lines += ["", signature]
     return "\n".join(lines)
-
-
-_FA_RE = None
-def _fa_pattern():
-    global _FA_RE
-    if _FA_RE is None:
-        import re as _r
-        _FA_RE = _r.compile(r"[؀-ۿ]")
-    return _FA_RE
 
 
 def persian_ratio(text: str) -> float:
