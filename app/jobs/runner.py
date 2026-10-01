@@ -75,6 +75,22 @@ def make_publish_handler(db: Database, settings: Settings,
         if not story:
             return True
 
+        # EXECUTION-TIME policy recheck: an old queued job must not bypass the
+        # CURRENT source allowlist / publication policy.
+        ev = db.query_one("SELECT * FROM events WHERE id=?", (story["event_id"],))
+        if ev:
+            origin = db.query(
+                "SELECT DISTINCT s.enabled en, s.source_control_state scs,"
+                " s.publication_policy pp FROM event_items ei"
+                " JOIN raw_items r ON r.id=ei.raw_item_id"
+                " JOIN sources s ON s.id=r.source_id"
+                " WHERE ei.event_id=? AND ei.is_duplicate=0", (story["event_id"],))
+            if origin and not any(o["en"] and o["scs"] == "OWNER_ENABLED" and o["pp"] == "AUTO" for o in origin):
+                pubs.mark(pubs.upsert(story_id, platform, payload_hash, int(story["version"])),
+                          "SKIPPED", error="CANCELLED_SOURCE_DISABLED")
+                log.info("publish cancelled at execution: source disabled/policy (story %s)", story_id)
+                return True
+
         # FRESHNESS GATE: stale backlog must not flood the channel later.
         ev = db.query_one("SELECT * FROM events WHERE id=?", (story["event_id"],))
         if ev:

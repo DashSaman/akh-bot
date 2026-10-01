@@ -31,6 +31,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from app.integrations.llm.glm import GlmProvider
     from app.db.repo import LlmCacheRepo
 
+    from app.integrations.llm.router import FreeAiRouter
+
+    settings._ai_router = FreeAiRouter()
     provider: LLMProvider | None = None
     if settings.llm_ready:
         provider = GlmProvider(

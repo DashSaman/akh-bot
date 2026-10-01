@@ -28,6 +28,7 @@ from app.publishing.telegram_bot import topic_emoji
 from app.verification.gates import (decide_claim_state, event_can_auto_publish, is_high_risk,
                                     classify_priority, extract_headline, is_valid_headline)
 from app.publishing.telegram_bot import is_persian_public_text, body_quality_gate
+from app.newsroom.translator import translate_event, needs_translation
 from app.publishing.fanout import distribution_plan
 
 log = logging.getLogger("akh.pipeline")
@@ -239,8 +240,8 @@ def deterministic_story_text(lifecycle: str, event: dict[str, Any],
         body = ("گزارش‌هایی درباره «" + event["title"][:120] + "» منتشر شده است.\n"
                 "این اطلاعات تاکنون به‌طور مستقل تأیید نشده است.")
         status = "PROVISIONAL"
-    return {"lifecycle": status, "body": body,
-            "claim_refs": [str(c["id"]) for c in claims[:3]]}
+    return {"lifecycle": status, "headline": event["title"][:140], "lead": body,
+            "body": body, "claim_refs": [str(c["id"]) for c in claims[:3]]}
 
 
 async def process_new_items(db: Database, provider: LLMProvider | None,
@@ -333,9 +334,14 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
             if body_mode != "compact":
                 det["body"] = "**" + headline + "**" + chr(10) + chr(10) + det["body"]
             if not is_persian_public_text(det["body"]):
-                events_repo.set_status(event["id"], "HELD")
-                log.info("NEEDS_LANGUAGE_PROCESSING event %s", event["id"], extra={"event_id": event["id"]})
-                continue
+                router_obj = getattr(settings, "_ai_router", None)
+                tr = await translate_event(router_obj, event["title"], det_body_of(summary_claims, event)) if router_obj else None
+                if tr:
+                    det["body"] = "**" + tr["headline"] + "**" + chr(10) + chr(10) + tr["lead"]
+                else:
+                    events_repo.set_status(event["id"], "HELD")
+                    log.info("NEEDS_LANGUAGE_PROCESSING event %s", event["id"], extra={"event_id": event["id"]})
+                    continue
             topic, tw = classify_priority(det_body_of(summary_claims, event) + " " + event["title"])
             if tw <= 20:
                 events_repo.set_status(event["id"], "HELD")
@@ -438,7 +444,34 @@ def _resolve_deadlines(db: Database, settings: Any, brand: Brand) -> int:
     return fixed
 
 
+_PUBLIC_NAMES = {
+    "tg naya_foriraq": "نایا", "tg withyashar": "یاشار", "tg caronline_original": "کارون",
+    "BBC Persian": "بی‌بی‌سی فارسی", "IRNA": "ایرنا", "ISNA": "ایسنا", "UN News": "سازمان ملل",
+    "Al Jazeera": "الجزیره", "DW Persian": "دویچه‌وله", "Guardian World": "گاردین",
+}
+
+
+def source_display_names(db, event_id):
+    rows = db.query(
+        "SELECT DISTINCT s.name FROM event_items ei JOIN sources s ON s.id=e.id"
+        " JOIN raw_items r ON r.id=ei.raw_item_id WHERE e.id=? AND ei.is_duplicate=0 LIMIT 3", (event_id,))
+    names = []
+    for r in rows:
+        n = r["name"]
+        for k, v in _PUBLIC_NAMES.items():
+            if k in n:
+                n = v
+                break
+        names.append(n.strip().replace("tg ", ""))
+    return "، ".join(dict.fromkeys(names))
+
+
 def det_body_of(claims, event):
     main = next((c["text"] for c in claims if c["state"] in ("CONFIRMED", "CORROBORATED")),
                 claims[0]["text"] if claims else event["title"])
     return main
+
+
+def _resembles_headline(headline, lead, threshold=0.7):
+    h, l = set(headline.lower().split()), set(lead.lower().split())
+    return len(h & l) / max(1, len(h | l)) >= threshold
