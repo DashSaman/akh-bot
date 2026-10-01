@@ -31,7 +31,7 @@
 | REG-026 | docs/runtime mismatch | stale docs / unverified claims; PART-2 sync reverted PART-1.1 evidence (CORE-002 blocker text) + stale Production SHA | INV-023/024 | tests/test_governance_regressions.py (7 fixtures: generic PART-PASS any part, BLOCKED_EXTERNAL semantics, SHA two-field rule, ambiguous-metric rejection, stale-blocker-on-DONE) | FIXED+TESTED (REGRESSED during PART-2 sync → reclosed @PART-2.1 with the exact regression fixture) |
 | REG-027 | PASS from tests w/o live evidence | reporting discipline | INV-023/024 | matrix runtime column | PARTIAL (matrix now enforces) |
 | REG-028 | same-event micro-post flood | every item → own event | INV-009/010 | burst-merge test | **OBSERVED (1020 events/2ch)** → Part 3 |
-| REG-029 | one interview → multiple posts | no claim clustering | INV-009 | interview-fixture test | OBSERVED (Yashar/TIME) → Part 3 |
+| REG-029 | one interview → multiple posts | no claim clustering | INV-009 | interview-fixture test | PARTIAL — matcher behind V2 → live closure P3-D/E |
 | REG-030 | source emoji/markup leaks | copy from source | EDIT spec | sanitizer emoji test | FIXED (emoji stripped in gate path) |
 | REG-031 | incomplete speaker prefix published | no completeness gate | INV-011/GATE-03 | WHO+WHAT test | **OBSERVED** («ترامپ به مجله تایم:» pattern) → Part 3 |
 | REG-032 | router exists, runtime never calls it | wiring partial | INV-017 | router-used test | PARTIAL (wired via settings._ai_router; no keys to prove live) → Part 5 |

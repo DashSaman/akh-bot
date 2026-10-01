@@ -1,8 +1,8 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-01 15:45Z, PART 2.1)
 
-- **Repository HEAD:** 8668402 (docs/governance commits may run ahead of runtime — valid)
-- **Production runtime SHA:** 8668402 (P3-A deployed; verified in-container)
-- **PART:** 1 = PASS · PART 2 = BLOCKED_EXTERNAL · **PART 3 = IN PROGRESS — P3-A complete, P3-B next**
+- **Repository HEAD:** abfcf9d (docs/governance commits may run ahead of runtime — valid)
+- **Production runtime SHA:** abfcf9d (P3-B deployed; verified in-container)
+- **PART:** 1 = PASS · PART 2 = BLOCKED_EXTERNAL · **PART 3 = IN PROGRESS — P3-A ✅, P3-B ✅ (matcher, V2 off), P3-C next**
 - **EVENT_ENGINE_V2_ENABLED:** false (P3-A deployed inactive; old pipeline authoritative)
 
 ## Runtime snapshot @2026-10-01 15:45Z (single read-only query set)

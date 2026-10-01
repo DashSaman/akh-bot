@@ -23,7 +23,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | CLAIM-001 | Structured atomic claims | PARTIAL | app/newsroom/claim_model.py (StructuredClaim, ClaimClass, extractor) | tests/test_claim_model.py (6) | V2 flag OFF — parser inactive in prod pipeline until P3-B/C wiring | DATA-MODEL.md | 8668402 | DONE waits P3-H/I live | 3 |
 | CLAIM-002 | Claim completeness gate + dedup pipeline | PARTIAL | claim_completeness.py (COMPLETE/CONTEXT_ONLY/INCOMPLETE + reason/missing_slots) | tests/test_claim_completeness.py (11) | gate implemented behind V2; live acceptance P3-H/I | DATA-MODEL.md | 8668402 | dedup pipeline = P3-C | 3 |
 | CLAIM-003 | Claim merge/dedup across messages | MISSING | — | — | 986 stories/1020 events prove flood | — | 9affb54 | REG-028/029/037/038 | 3 |
-| EVENT-001 | One event per real-world occurrence (INV-009/010) | BROKEN | clustering only near-dup | test_dedup (dup only) | 1020 events ≈ items; interview → multiple posts | — | 9affb54 | REG-028/029/040 | 3 |
+| EVENT-001 | One real-world event grouping (multi-signal identity) | PARTIAL | event_fingerprint.py + matcher (3-way, hard conflicts, per-type continuation) | tests/test_event_matcher.py (12) | implemented+tested behind V2=false; live closure waits P3-H/I | DATA-MODEL.md | abfcf9d | — | 3 |
 | EVENT-002 | Same-event update edits same message (INV-012) | PARTIAL | ledger edit path exists | test_breaking_flow | msg 109→109 proven once | — | 9affb54 | not wired to new-claim-for-event flow | 3 |
 | EVENT-003 | Burst aggregation windows | MISSING | — (config keys absent) | — | — | — | 9affb54 | spec keys EVENT_BURST_* undefined | 3 |
 | VERIFY-001 | Hard gates (high-risk single-source, conflict) | DONE | verification/gates.py | test_pipeline held cases | HELD=59 live | VERIFICATION.md | 69059ab | — | — |
@@ -38,6 +38,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | EDIT-003 | Icon-only lifecycle, no «✅ تأیید شد» | DONE | STATUS_ICONS | test_language_gate | channel clean | EDITORIAL-STYLE | 69059ab | — | — |
 | GATE-11 | Source attribution exactly-once, fail-closed resolution | DONE | pipeline _render_public + source_display_names | tests/test_canonical_story.py (5 cases) | last-20 SENT: missing=0 dup=0 | — | afcc60f | — | 1 |
 | REG-026 | Docs/runtime mismatch governance | DONE | validator v3 + regression fixtures | tests/test_governance_regressions.py (7) | caught live PART-2 regression | — | PART2.1 | — | — |
+| GATE-05 | Three-way event match decision | PARTIAL | event_fingerprint.decide | tests/test_event_matcher.py | behind V2=false | — | abfcf9d | — | — |
 | EDIT-004 | Source attribution exactly once, names only | DONE | build_public_text source_names | tests | منبع in samples | — | 69059ab | — | — |
 | MEDIA-001 | sendPhoto/sendVideo + Persian caption | DONE | telegram_bot.send_media | test_media.py | msg 247 photo live | — | 9affb54 | — | 6 |
 | MEDIA-002 | Temp cache + cleanup + disk guard | DONE | media.py cleanup/publisher gates | test_media.py | cache=0 live | — | 9affb54 | — | 6 |
