@@ -28,7 +28,7 @@
 | REG-023 | priority read as trust | conflated flags | INV-006 | separate-flags test | FIXED+TESTED |
 | REG-024 | allowlist not revalidated at execution | enqueue-only | INV-005 | execution recheck test | FIXED+TESTED |
 | REG-025 | branded card confused with original media | status labels | INV-024 | media-state labels (Part 6, CORE-006) | PARTIAL |
-| REG-026 | docs/runtime mismatch | stale docs / unverified claims | INV-023/024 | validator: single-Production-SHA rule, metric-qualifier rule, Part-PASS⇔all-assigned-DONE rule, plan/matrix mapping | FIXED+TESTED (PART1.1: caught & fixed stale afcc60f SHA + ambiguous SENT counts) |
+| REG-026 | docs/runtime mismatch | stale docs / unverified claims; PART-2 sync reverted PART-1.1 evidence (CORE-002 blocker text) + stale Production SHA | INV-023/024 | tests/test_governance_regressions.py (7 fixtures: generic PART-PASS any part, BLOCKED_EXTERNAL semantics, SHA two-field rule, ambiguous-metric rejection, stale-blocker-on-DONE) | FIXED+TESTED (REGRESSED during PART-2 sync → reclosed @PART-2.1 with the exact regression fixture) |
 | REG-027 | PASS from tests w/o live evidence | reporting discipline | INV-023/024 | matrix runtime column | PARTIAL (matrix now enforces) |
 | REG-028 | same-event micro-post flood | every item → own event | INV-009/010 | burst-merge test | **OBSERVED (1020 events/2ch)** → Part 3 |
 | REG-029 | one interview → multiple posts | no claim clustering | INV-009 | interview-fixture test | OBSERVED (Yashar/TIME) → Part 3 |

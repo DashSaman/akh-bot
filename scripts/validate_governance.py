@@ -97,25 +97,63 @@ def main() -> int:
                         and cells[-2] != "1" and cells[3] != "DONE"):
                     fail(errs, f"{cells[1]}: appears in PART-01 plan but Matrix Part={cells[-2]} (cross-phase leak)")
 
-    # 4d) CURRENT-STATUS must carry exactly one Production SHA line and it must
-    #     be a 7-hex token; a Part marked PASS requires all its Part-N IDs DONE.
+    # 4d) CURRENT-STATUS structural rules
     cs = (DOCS / "00-CURRENT-STATUS.md").read_text(encoding="utf-8")
-    shas = re.findall(r"Production SHA[^0-9a-f]*([0-9a-f]{7,40})", cs)
-    if len(set(shas)) != 1:
-        fail(errs, f"Current-Status has {len(set(shas))} distinct Production SHA values: {set(shas)}")
-    if "SENT=" in cs and "ledger SENT" not in cs:
-        fail(errs, "Current-Status uses ambiguous SENT= without metric qualifier")
-    m = re.search(r"PART:\s*\*\*1 = PASS", cs)
-    if m:
-        p1 = [cells[1] for line in matrix.splitlines()
-              for cells in [[c.strip() for c in line.split("|")]]
-              if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[-2] == "1"]
-        st = {cells[1]: cells[3] for line in matrix.splitlines()
-              for cells in [[c.strip() for c in line.split("|")]]
-              if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1])}
-        not_done = [r for r in p1 if st.get(r) != "DONE"]
-        if not_done:
-            fail(errs, f"Current-Status claims PART 1 PASS but non-DONE assigned IDs: {not_done}")
+    repo = re.findall(r"Repository HEAD[^0-9a-f]*([0-9a-f]{7,40})", cs)
+    prod = re.findall(r"Production runtime SHA[^0-9a-f]*([0-9a-f]{7,40})", cs)
+    if not repo or not prod:
+        fail(errs, "Current-Status must declare both 'Repository HEAD' and 'Production runtime SHA' as separate fields")
+    _p = cs.split("Production")
+    if "Production SHA (=repo HEAD" in cs or (len(_p) > 1 and "=repo HEAD" in _p[1][:80]):
+        fail(errs, "Current-Status must not assert Production SHA equals repo HEAD unless verified — use two fields")
+    # ambiguous unqualified metric wording
+    QUAL = r"(Publication ledger|Telegram remote-mapped|Jobs)[^\n]{0,4}SENT"
+    qual_ok = re.sub(QUAL, "OK", cs)
+    for pat in (r"\bSENT\s*=\s*\d+", r"\b\d+ SENT mapped\b", r"(?<!ledger )(?!remote-mapped )\bSENT \d+(?!:)"):
+        if re.search(pat, qual_ok):
+            fail(errs, f"Current-Status contains ambiguous metric wording matching {pat!r} — qualify as 'Publication ledger SENT: N' etc.")
+
+    # 4e) generic PART status validation (Parts 1-10)
+    #     PASS => all assigned Matrix IDs DONE.
+    #     BLOCKED_EXTERNAL => assigned may be DONE or BLOCKED_EXTERNAL,
+    #     but none BROKEN/MISSING/PARTIAL (internally-actionable must be complete).
+    part_status = {}
+    for line in cs.splitlines():
+        if "PART" not in line:
+            continue
+        for m in re.finditer(r"(\d+)\s*=\s*(PASS|BLOCKED_EXTERNAL|FAIL|PARTIAL)", line):
+            part_status[int(m.group(1))] = m.group(2)
+    rows_by_part: dict[int, list[tuple[str, str]]] = {}
+    st_all: dict[str, str] = {}
+    for line in matrix.splitlines():
+        cells = [c.strip() for c in line.split("|")]
+        if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]):
+            st_all[cells[1]] = cells[3]
+            if cells[-2].isdigit():
+                rows_by_part.setdefault(int(cells[-2]), []).append((cells[1], cells[3]))
+    for pn, status in part_status.items():
+        assigned = rows_by_part.get(pn, [])
+        if not assigned:
+            fail(errs, f"PART {pn} recorded {status} but no Matrix rows assigned to Part {pn}")
+            continue
+        if status == "PASS":
+            bad = [r for r, st in assigned if st != "DONE"]
+            if bad:
+                fail(errs, f"Current-Status claims PART {pn} PASS but non-DONE assigned IDs: {bad}")
+        elif status == "BLOCKED_EXTERNAL":
+            incomplete = [r for r, st in assigned if st in ("BROKEN", "MISSING", "PARTIAL")]
+            if incomplete:
+                fail(errs, f"PART {pn} BLOCKED_EXTERNAL but internally-actionable IDs incomplete: {incomplete}")
+
+    # 4f) stale-evidence overwrite guard: a DONE row may not carry obsolete
+    #     blocker text (the PART-2 regression mechanism for REG-026).
+    for line in matrix.splitlines():
+        cells = [c.strip() for c in line.split("|")]
+        if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[3] == "DONE":
+            blocker = cells[-3] if len(cells) > 3 else ""
+            if any(phrase in blocker for phrase in (
+                    "direct-story admin path exists", "bypass", "still carry", "absent (TELETHON")):
+                fail(errs, f"{cells[1]}: DONE row carries stale blocker text '{blocker[:60]}' — evidence overwrite regression")
 
     # 5) Part-1 assigned requirements all appear in PART-01 plan
     for line in matrix.splitlines():
