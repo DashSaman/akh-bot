@@ -308,16 +308,6 @@ def publisher_language_gate(text: str) -> bool:
     return story_content_language_check(text)
 
 
-def persian_ratio(text: str) -> float:
-    """Share of letters that are Persian-script (fa vs ar share the block)."""
-    import re as _r
-    letters = [c for c in (text or "") if c.isalpha()]
-    if not letters:
-        return 1.0
-    fa = sum(1 for c in letters if "؀" <= c <= "ۿ")
-    return fa / len(letters)
-
-
 _PERSIAN_ONLY_LETTERS = set("پچژگ")
 
 

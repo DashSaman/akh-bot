@@ -161,17 +161,42 @@ def _public_text_for(det, brand, mode="hidden"):
     return build_public_text(det["lifecycle"], det["body"], brand, mode, True)
 
 
+def _render_public(det, brand, src_names):
+    """CORE-002/003 render contract: structured fields -> public text."""
+    from app.publishing.telegram_bot import build_public_text
+
+    headline = (det.get("headline") or "").strip()
+    lead = (det.get("lead") or "").strip()
+    body = headline + (chr(10) + chr(10) + lead if lead and lead != headline else "")
+    return build_public_text(det["lifecycle"], body, brand, "hidden", True,
+                             source_names=src_names)
+
+
 def _create_and_enqueue(db, settings, brand, event_id, det):
-    from app.publishing.telegram_bot import build_public_text, is_persian_public_text
-    text = build_public_text(det["lifecycle"], det["body"], brand, "hidden", True)
-    draft = {"headline": det["body"].split("chr(10)")[0][:120], "lead": det["body"],
+    src_names = det.get("source_names") or source_display_names(db, event_id)
+    if not src_names and _event_has_eligible(db, event_id):
+        EventsRepo(db).set_status(event_id, "HELD")  # GATE-11 fail-closed
+        log.info("SOURCE_NAME_RESOLUTION_ERROR event %s", event_id, extra={"event_id": event_id})
+        return None
+    text = _render_public(det, brand, src_names)
+    headline = (det.get("headline") or "").strip()[:140]
+    lead = (det.get("lead") or "").strip()
+    draft = {"headline": headline, "lead": lead, "details": det.get("details", []),
+             "source_names": src_names,
              "platform_variants": {"telegram": text},
-             "generation_mode": "DETERMINISTIC", "claim_refs": det.get("claim_refs", [])}
-    story_id = StoriesRepo(db).create(event_id, draft["headline"], draft["lead"], draft)
+             "generation_mode": "DETERMINISTIC", "claim_refs": det.get("claim_refs", []),
+             "language": "fa", "topic": det.get("topic", "GENERAL_IMPORTANT")}
+    story_id = StoriesRepo(db).create(event_id, headline, lead, draft)
     db.execute("UPDATE stories SET lifecycle=? WHERE id=?",
                ("PROVISIONAL" if det["lifecycle"] == "PROVISIONAL" else "CONFIRMED", story_id))
     _enqueue_platforms(db, settings, story_id, text, det["lifecycle"])
     return story_id
+
+
+def _event_has_eligible(db, event_id):
+    return bool(db.query_one(
+        "SELECT 1 FROM event_items ei JOIN raw_items r ON r.id=ei.raw_item_id"
+        " WHERE ei.event_id=? AND r.activation_ok=1 AND ei.is_duplicate=0", (event_id,)))
 
 
 def _publish_deterministic(db, settings, brand, story, det, lifecycle):
@@ -453,11 +478,13 @@ _PUBLIC_NAMES = {
 
 
 def source_display_names(db, event_id):
+    # GATE-11: distinct SOURCES reporting the event (item-level dup flag is about
+    # content, not source presence — a duplicated report still attributes its source)
     rows = db.query(
         "SELECT DISTINCT s.name FROM event_items ei"
         " JOIN raw_items r ON r.id=ei.raw_item_id"
         " JOIN sources s ON s.id=r.source_id"
-        " WHERE ei.event_id=? AND ei.is_duplicate=0 LIMIT 3", (event_id,))
+        " WHERE ei.event_id=? AND r.activation_ok=1 LIMIT 3", (event_id,))
     names = []
     for r in rows:
         n = r["name"]
