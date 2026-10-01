@@ -1,16 +1,15 @@
-# GAP-AUDIT (generated from 01-REQUIREMENTS-MATRIX @9affb54)
+# GAP-AUDIT (from 01-REQUIREMENTS-MATRIX @PART1.1)
 
-## Critical BROKEN (must fix first)
-- EVENT-001 same-event identity → Part 3 (live evidence: 1020 events / 2 channels؛ interview→multi-post)
+## Critical BROKEN
+- EVENT-001 → Part 3 (1020 events/2ch micro-post flood)
 
-## PARTIAL (9)
-CORE-001/002/003 (canonical render leftovers) → Part 1 · CLAIM-001 (paraphrase) → Part 3 · EVENT-002 (edit-on-new-claim wiring) → Part 3 · SRC-003 (edit UI) · MEDIA-003 (original bytes) → Part 6 · PUB-003 (floor tuning) → Part 3 · ADMIN-004 (health page) → Part 7 · REG-025 labels
+## PARTIAL (12)
+CORE-006 media labels → P6 · CLAIM-001 paraphrase → P3 · EVENT-002 edit-on-new-claim wiring → P3 · EVENT... (see Matrix) · SRC-003 edit UI → P7 · MEDIA-003 original bytes → P6 · PUB-003 floor → P3 · ADMIN-004 health page → P7 · AI-001/002/003 live proof → P5/BLOCKED key · PORT-002 full drill → P9 · REG-025 → P6
 
-## MISSING (7)
-CLAIM-002 completeness · CLAIM-003 merge · EVENT-003 burst windows → Part 3 · ADMIN-002 AI page · ADMIN-003 intake → Part 7 · GROWTH-001 → Part 10
+## MISSING (9)
+CLAIM-002/003, EVENT-003 → P3 · CORE-007/008 → P4 · CORE-009 → P8 · ADMIN-002/003 → P7 · GROWTH-001 → P10
 
 ## BLOCKED_EXTERNAL (3)
-INGEST-003 Telethon realtime (session) · LANG-003 live translation (AI key) · PLATFORM-002 (OAuth/cost)
+INGEST-003 (Telethon session) · LANG-003 (AI key) · PLATFORM-002 (OAuth/cost)
 
-## DONE (31) — do not rewrite
-see matrix for evidence columns.
+## DONE (36) — incl. Part-1 seven (CORE-001..004, GATE-11 + REG-022/026 sealed by tests)

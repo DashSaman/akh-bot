@@ -97,6 +97,26 @@ def main() -> int:
                         and cells[-2] != "1" and cells[3] != "DONE"):
                     fail(errs, f"{cells[1]}: appears in PART-01 plan but Matrix Part={cells[-2]} (cross-phase leak)")
 
+    # 4d) CURRENT-STATUS must carry exactly one Production SHA line and it must
+    #     be a 7-hex token; a Part marked PASS requires all its Part-N IDs DONE.
+    cs = (DOCS / "00-CURRENT-STATUS.md").read_text(encoding="utf-8")
+    shas = re.findall(r"Production SHA[^0-9a-f]*([0-9a-f]{7,40})", cs)
+    if len(set(shas)) != 1:
+        fail(errs, f"Current-Status has {len(set(shas))} distinct Production SHA values: {set(shas)}")
+    if "SENT=" in cs and "ledger SENT" not in cs:
+        fail(errs, "Current-Status uses ambiguous SENT= without metric qualifier")
+    m = re.search(r"PART:\s*\*\*1 = PASS", cs)
+    if m:
+        p1 = [cells[1] for line in matrix.splitlines()
+              for cells in [[c.strip() for c in line.split("|")]]
+              if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[-2] == "1"]
+        st = {cells[1]: cells[3] for line in matrix.splitlines()
+              for cells in [[c.strip() for c in line.split("|")]]
+              if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1])}
+        not_done = [r for r in p1 if st.get(r) != "DONE"]
+        if not_done:
+            fail(errs, f"Current-Status claims PART 1 PASS but non-DONE assigned IDs: {not_done}")
+
     # 5) Part-1 assigned requirements all appear in PART-01 plan
     for line in matrix.splitlines():
         cells = [c.strip() for c in line.split("|")]
