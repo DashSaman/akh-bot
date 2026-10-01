@@ -75,7 +75,7 @@ def test_missing_production_runtime_sha_field_fails():
 
 def test_asserted_sha_equality_without_verification_fails():
     d = mutated_docs(status_repl=(
-        "- **Production runtime SHA:** 1fd0200 (verified in-container; equal at this snapshot)",
+        "Production runtime SHA",
         "- **Production SHA (=repo HEAD):** 1fd0200"))
     rc, out = validate(d)
     assert rc != 0 and ("=repo HEAD" in out or "equals repo HEAD" in out)
