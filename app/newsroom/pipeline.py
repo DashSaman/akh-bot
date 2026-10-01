@@ -271,6 +271,7 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
         s["id"]: s["verification_allowed"] for s in SourcesRepo(db).list()
     }
     source_roles = {s["id"]: s["source_role"] for s in SourcesRepo(db).list()}
+    pub_policies = {s["id"]: s.get("publication_policy", "AUTO") for s in SourcesRepo(db).list()}
     llm_allowed = provider is not None and llm_budget_ok(db, settings)
     for event in events_repo.list(limit=80):
         if event["status"] not in ACTIVE_EVENT_STATUSES:
@@ -279,6 +280,12 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
         event_items = events_repo.items(event["id"])
         eligible = [i for i in event_items if i["activation_ok"]]
         if not eligible:
+            continue
+        # publication policy: only AUTO-origin events may create NEW public stories
+        if not existing_story and all(
+                pub_policies.get(i["source_id"], "AUTO") != "AUTO" for i in eligible):
+            events_repo.set_status(event["id"], "HELD")
+            log.info("PUBLICATION_POLICY_HOLD event %s", event["id"], extra={"event_id": event["id"]})
             continue
         baseline = build_claim_evidence(event, event_items, verification_flags)
         llm_claims: list[str] | None = None

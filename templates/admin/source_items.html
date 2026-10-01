@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% block title %}خبرهای {{ src.name }}{% endblock %}
+{% block content %}
+<h1>آخرین خبرها — {{ src.name }} <span class="small">({{ src.publication_policy }} · رتبه {{ src.priority_rank }} · {{ src.polling_interval_seconds }}s)</span></h1>
+<table>
+  <tr><th>زمان</th><th>متن</th><th>زبان</th><th>وضعیت پردازش</th><th>رویداد</th><th>وضعیت رویداد</th></tr>
+  {% for i in items %}
+  <tr>
+    <td class="small">{{ i.published_at or i.fetched_at }}</td>
+    <td class="small">{{ (i.title or i.text)[:90] }}</td>
+    <td>{{ i.language }}</td>
+    <td>{{ i.processed_state }}</td>
+    <td>{% if i.event_id %}<a href="/admin/events/{{ i.event_id }}">#{{ i.event_id }}</a>{% else %}—{% endif %}</td>
+    <td>{{ i.event_status or '—' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

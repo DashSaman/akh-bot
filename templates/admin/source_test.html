@@ -1,0 +1,14 @@
+{% extends "admin/base.html" %}
+{% block title %}تست اتصال{% endblock %}
+{% block content %}
+<h1>تست اتصال — {{ src.name }}</h1>
+<p>
+  {% if result.ok %}<span class="badge ok">OK</span>{% else %}<span class="badge danger">FAIL</span>{% endif %}
+  حالت: {{ result.mode }}
+  {% if result.http %} · HTTP {{ result.http }}{% endif %}
+  {% if result.latency_ms %} · {{ result.latency_ms }}ms{% endif %}
+</p>
+{% if result.latest %}<p class="small">آخرین آیتم: {{ result.latest }}</p>{% endif %}
+{% if result.error %}<p class="error">{{ result.error }}</p>{% endif %}
+<p><a href="/admin/sources">بازگشت به منابع</a></p>
+{% endblock %}

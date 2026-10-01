@@ -346,3 +346,93 @@ async def set_pause(request: Request, key: str = Form(...), value: str = Form(..
     if key in allowed and value in ("0", "1"):
         SettingsRepo(_db(request)).set(key, value)
     return RedirectResponse("/admin/settings", status_code=303)
+
+
+@router.post("/sources/{source_id}/edit")
+async def source_edit(request: Request, source_id: int, name: str = Form(...),
+                      priority_rank: int = Form(99), polling_interval_seconds: int = Form(120),
+                      publication_policy: str = Form("AUTO"), language: str = Form("fa"),
+                      topic_mode: str = Form("ALL"), csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    if publication_policy not in ("AUTO", "VERIFY_ONLY", "DISCOVERY_ONLY", "NEVER_PUBLISH"):
+        publication_policy = "AUTO"
+    SourcesRepo(_db(request)).update(
+        source_id, name=name, priority_rank=max(1, priority_rank),
+        polling_interval_seconds=max(20, polling_interval_seconds),
+        publication_policy=publication_policy, language=language, topic_mode=topic_mode)
+    return RedirectResponse("/admin/sources", status_code=303)
+
+
+@router.post("/sources/{source_id}/archive")
+async def source_archive(request: Request, source_id: int, csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    repo = SourcesRepo(_db(request))
+    repo.update(source_id, enabled=0, source_control_state="ARCHIVED")
+    repo.set_status(source_id, "BLOCKED")
+    return RedirectResponse("/admin/sources", status_code=303)
+
+
+@router.post("/sources/{source_id}/fetch-now")
+async def source_fetch_now(request: Request, source_id: int, csrf: str = Form("")):
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    db = _db(request)
+    source = SourcesRepo(db).get(source_id)
+    if not source:
+        return RedirectResponse("/admin/sources", status_code=303)
+    try:
+        if source["platform"] == "rss":
+            from app.ingestion.rss import fetch_rss_source
+            summary = await fetch_rss_source(source, db)
+        elif source["platform"] == "telegram" and source.get("source_type") == "telegram_web_preview":
+            from app.ingestion.telegram_web import fetch_telegram_web_source
+            summary = await fetch_telegram_web_source(source, db)
+        else:
+            summary = {"error": "unsupported collector"}
+    except Exception as e:  # noqa: BLE001
+        summary = {"error": str(e)[:200]}
+    SettingsRepo(db).set("last_fetch_now", json.dumps({"id": source_id, **{k: summary.get(k) for k in ("new", "skipped", "error")}}, ensure_ascii=False))
+    return RedirectResponse("/admin/sources", status_code=303)
+
+
+@router.get("/sources/{source_id}/items", response_class=HTMLResponse)
+async def source_items_view(request: Request, source_id: int):
+    if (r := await require_login(request)):
+        return r
+    db = _db(request)
+    rows = db.query(
+        "SELECT r.*, e.id AS event_id, e.status AS event_status FROM raw_items r"
+        " LEFT JOIN event_items ei ON ei.raw_item_id=r.id LEFT JOIN events e ON e.id=ei.event_id"
+        " WHERE r.source_id=? ORDER BY r.id DESC LIMIT 50", (source_id,))
+    src = SourcesRepo(db).get(source_id)
+    return templates.TemplateResponse(request, "admin/source_items.html",
+                                      _ctx(request, items=rows, src=src))
+
+
+@router.get("/sources/{source_id}/test", response_class=HTMLResponse)
+async def source_test_view(request: Request, source_id: int):
+    if (r := await require_login(request)):
+        return r
+    db = _db(request)
+    source = SourcesRepo(db).get(source_id)
+    result = {"ok": False, "mode": source["source_type"] if source else "?"}
+    if source:
+        try:
+            import httpx as _hx, time as _t
+            t0 = _t.monotonic()
+            async def probe():
+                from app.ingestion.telegram_web import parse_preview_page
+                async with _hx.AsyncClient(timeout=20, follow_redirects=True) as cl:
+                    resp = await cl.get(f"https://t.me/s/{source['external_id']}")
+                msgs = parse_preview_page(resp.text) if resp.status_code == 200 else []
+                return resp.status_code, (msgs[0] if msgs else None)
+            code, latest = await probe()
+            result = {"ok": code == 200, "mode": "WEB_FALLBACK", "http": code,
+                      "latency_ms": int((_t.monotonic() - t0) * 1000),
+                      "latest": (latest or {}).get("text", "")[:120]}
+        except Exception as e:  # noqa: BLE001
+            result = {"ok": False, "error": str(e)[:200], "mode": "WEB_FALLBACK"}
+    return templates.TemplateResponse(request, "admin/source_test.html",
+                                      _ctx(request, result=result, src=source))

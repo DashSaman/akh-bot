@@ -37,17 +37,22 @@ class SourcesRepo:
                source_type: str = "news_organization", status: str = "DISCOVERED",
                priority: int = 50, polling_interval_min: int = 15, notes: str = "",
                verification_allowed: bool = False, source_role: str = "MAJOR_NEWSROOM",
-               can_increase_independent_count: bool = True) -> int:
+               can_increase_independent_count: bool = True,
+               publication_policy: str = "AUTO", priority_rank: int = 99,
+               polling_interval_seconds: int = 0) -> int:
         activated = utcnow() if status == "APPROVED" else None
         cur = self.db.execute(
             "INSERT INTO sources(name,platform,external_id,url,language,country,category,"
             "source_type,status,enabled,priority,polling_interval_min,notes,created_at,activated_at,"
-            "verification_allowed,source_role,can_increase_independent_count)"
-            " VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?)",
+            "verification_allowed,source_role,can_increase_independent_count,"
+            "publication_policy,priority_rank,polling_interval_seconds)"
+            " VALUES(?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?)",
             (name, platform, external_id, url, language, country, category,
              source_type, status, priority, polling_interval_min, notes, utcnow(), activated,
              1 if verification_allowed else 0, source_role,
-             1 if can_increase_independent_count else 0),
+             1 if can_increase_independent_count else 0,
+             publication_policy, priority_rank,
+             polling_interval_seconds or max(20, polling_interval_min * 60)),
         )
         return int(cur.lastrowid)
 
@@ -62,7 +67,9 @@ class SourcesRepo:
     def update(self, source_id: int, **fields: Any) -> None:
         allowed = {"name", "url", "external_id", "language", "country", "category",
                    "source_type", "priority", "polling_interval_min", "notes", "enabled",
-                   "verification_allowed", "source_role", "can_increase_independent_count"}
+                   "verification_allowed", "source_role", "can_increase_independent_count",
+                   "publication_policy", "priority_rank", "polling_interval_seconds",
+                   "source_control_state", "topic_mode", "selected_topics"}
         sets, params = [], []
         for k, v in fields.items():
             if k in allowed:
@@ -82,14 +89,17 @@ class SourcesRepo:
         )
 
     def due(self, now: datetime) -> list[dict[str, Any]]:
+        """SOURCE_ALLOWLIST: only owner-ENABLED sources are ever polled."""
         rows = self.db.query(
             "SELECT * FROM sources WHERE status='APPROVED' AND enabled=1"
+            " AND source_control_state IN ('OWNER_ENABLED','DISCOVERY_ONLY')"
+            " ORDER BY priority_rank, priority, id"
         )
         out = []
         for s in rows:
-            interval = max(1, int(s["polling_interval_min"]))
+            secs = int(s.get("polling_interval_seconds") or 0) or int(s["polling_interval_min"]) * 60
             last = parse_iso(s["last_fetch_at"])
-            if last is None or (now - last) >= timedelta(minutes=interval):
+            if last is None or (now - last) >= timedelta(seconds=max(20, secs)):
                 out.append(s)
         return out
 

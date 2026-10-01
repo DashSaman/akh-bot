@@ -38,20 +38,44 @@
   </label>
   <label class="checkbox-line"><input type="checkbox" name="verification_allowed"> راستی‌آزمایی: تأیید مالک (verification)</label>
   <label class="checkbox-line"><input type="checkbox" name="can_increase_independent_count" checked> افزایش شمار خاستگاه مستقل</label>
-  <label>فاصله نظرسنجی (دقیقه) <input name="polling_interval_min" type="number" value="15" min="1"></label>
+  <label>رتبه اولویت (1=بالاترین) <input name="priority_rank" type="number" value="99" min="1"></label>
+  <label>فاصله نظرسنجی (ثانیه) <input name="polling_interval_seconds" type="number" value="120" min="20"></label>
+  <label>سیاست انتشار
+    <select name="publication_policy">
+      <option value="AUTO" selected>AUTO — انتشار خودکار</option>
+      <option value="VERIFY_ONLY">VERIFY_ONLY — فقط تأییدکننده</option>
+      <option value="DISCOVERY_ONLY">DISCOVERY_ONLY — فقط کشف</option>
+      <option value="NEVER_PUBLISH">NEVER_PUBLISH — فقط ذخیره</option>
+    </select>
+  </label>
   <button type="submit">افزودن</button>
 </form>
 
-<h2>فهرست منابع</h2>
+<h2>فهرست منابع (اتاق کنترل)</h2>
+<p class="small">
+فعال: <b>{{ sources | selectattr('enabled') | list | length }}</b> ·
+غیرفعال: <b>{{ sources | rejectattr('enabled') | list | length }}</b> ·
+خطادار: <b>{{ sources | selectattr('last_error') | list | length }}</b> ·
+Breaking: <b>{{ sources | selectattr('breaking_source') | list | length }}</b> ·
+Telegram: <b>{{ sources | selectattr('platform','equalto','telegram') | list | length }}</b> ·
+RSS: <b>{{ sources | selectattr('platform','equalto','rss') | list | length }}</b>
+</p>
+<form method="post" action="/admin/sources" class="small" style="margin:8px 0">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <label class="checkbox-line">ویرایش سریع رتبه/فاصله (شناسه): </label>
+  {% for s in sources %}
+  {% endfor %}
+</form>
 <p class="small">جمع‌آوری (APPROVED) فقط یعنی «فعال فنی»؛ اعتماد راستی‌آزمایی جداگانه و توسط مالک تأیید می‌شود (TECHNICALLY_ENABLED ≠ EDITORIALLY_APPROVED).</p>
 <table>
-  <tr><th>شناسه</th><th>نام</th><th>پلتفرم</th><th>نقش</th><th>گردآوری</th><th>راستی‌آزمایی (مالک)</th><th>فعال</th><th>سلامت</th><th>آخرین موفقیت</th><th>عملیات</th></tr>
+  <tr><th>رتبه</th><th>نام</th><th>پلتفرم</th><th>سیاست</th><th>گردآوری</th><th>راستی‌آزمایی</th><th>سلامت</th><th>آخرین بررسی</th><th>عملیات</th></tr>
   {% for s in sources %}
   <tr>
-    <td>{{ s.id }}</td>
-    <td>{{ s.name }}<div class="small">{{ s.url or s.external_id }}</div></td>
+    <td><b>{{ s.priority_rank }}</b><div class="small">#{{ s.id }} · {{ s.polling_interval_seconds or (s.polling_interval_min*60) }}s</div></td>
+    <td>{{ s.name }}<div class="small">{{ s.url or s.external_id }} · {{ s.source_control_state }}</div>
+      <div class="small"><a href="/admin/sources/{{ s.id }}/items">خبرها</a> · <a href="/admin/sources/{{ s.id }}/test">تست</a></div></td>
     <td>{{ s.platform }}</td>
-    <td class="small">{{ s.source_role }}</td>
+    <td class="small">{{ s.publication_policy or 'AUTO' }}</td>
     <td>
       <form method="post" action="/admin/sources/{{ s.id }}/status" class="inline-form">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
@@ -77,6 +101,14 @@
       <form method="post" action="/admin/sources/{{ s.id }}/toggle" class="inline-form">
         <input type="hidden" name="csrf" value="{{ csrf_token }}">
         <button type="submit">{{ 'غیرفعال' if s.enabled else 'فعال' }}</button>
+      </form>
+      <form method="post" action="/admin/sources/{{ s.id }}/fetch-now" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button type="submit">بررسی الان</button>
+      </form>
+      <form method="post" action="/admin/sources/{{ s.id }}/archive" class="inline-form">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button type="submit">آرشیو</button>
       </form>
     </td>
   </tr>
