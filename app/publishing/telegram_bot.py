@@ -181,6 +181,28 @@ class TelegramBotPublisher:
             return {"ok": True, "message_id": data["result"]["message_id"]}
         return {"ok": False, "error": f"telegram: {data.get('description', '?')}"}
 
+    async def send_media(self, path, caption, video=False):
+        """sendPhoto/sendVideo with Persian newsroom caption (one coherent post)."""
+        import os as _os
+        field = 'video' if video else 'photo'
+        try:
+            fh = open(path, 'rb')
+        except OSError as e:
+            return {'ok': False, 'error': 'cache: %s' % e}
+        try:
+            async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
+                resp = await client.post(
+                    '%s/%s' % (self.base, 'sendVideo' if video else 'sendPhoto'),
+                    data={'chat_id': self.chat_id, 'caption': caption[:1024], 'parse_mode': 'HTML'},
+                    files={field: (_os.path.basename(path), fh)})
+            data = resp.json()
+        finally:
+            fh.close()
+        if data.get('ok'):
+            return {'ok': True, 'message_id': data['result']['message_id']}
+        return {'ok': False, 'error': 'telegram: %s' % data.get('description', '?')}
+
+
     async def edit_message(self, message_id: str, text: str) -> dict[str, Any]:
         try:
             payload = {"chat_id": self.chat_id, "message_id": int(message_id),

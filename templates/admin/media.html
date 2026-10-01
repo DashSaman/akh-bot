@@ -1,0 +1,13 @@
+{% extends "admin/base.html" %}
+{% block title %}مدیا{% endblock %}
+{% block content %}
+<h1>مدیا <span class="small">کش: {{ cache_mb }} MB (موقتی — پس از انتشار بایت‌ها حذف می‌شوند)</span></h1>
+<table>
+  <tr><th>مسیر کش</th><th>خبر</th><th>حجم MB</th><th>زمان</th><th>وضعیت انتشار</th></tr>
+  {% for r in rows %}
+  <tr><td class="small">{{ r.path.split('/')[-1] }}</td><td class="small">{{ (r.headline or '')[:60] }}</td>
+      <td>{{ r.size_mb }}</td><td class="small">{{ r.created_at }}</td>
+      <td>{{ 'SENT' if r.sent else 'PENDING' }}</td></tr>
+  {% else %}<tr><td colspan="5">موردی در کش نیست.</td></tr>{% endfor %}
+</table>
+{% endblock %}

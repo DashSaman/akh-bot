@@ -19,6 +19,10 @@
   {% for p, on in pauses.items() %}{% if p != 'all' and on %}<span class="badge warn">{{ p }} متوقف</span>{% endif %}{% endfor %}
 </p>
 
+<p>
+  <a class="badge ok" href="/admin/sources">مدیریت منابع خبری</a> — «تعیین کنید ربات اخبار را از کدام کانال‌ها، سایت‌ها و حساب‌ها دریافت کند.»
+  &nbsp; <a class="badge ok" href="/admin/platforms">اتصال شبکه‌های اجتماعی</a> — «تعیین کنید اخبار را در کدام پلتفرم‌ها منتشر کنیم.»
+</p>
 <h2>وضعیت اجزا (صادقانه — کد موجود بودن ≠ فعال بودن)</h2>
 <ul class="plain">
   {% for name, st in integrations.items() %}
