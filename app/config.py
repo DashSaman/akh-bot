@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     media_cache_max_mb: int = 512
     disk_critical_percent: int = 85
     max_source_video_mb: int = 50
+    event_engine_v2_enabled: bool = False  # P3 kill switch — default OFF
     ingest_interval_seconds: int = 300
     pipeline_interval_seconds: int = 60
     jobs_interval_seconds: int = 10
