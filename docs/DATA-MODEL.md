@@ -18,3 +18,8 @@
 
 Timestamps are ISO-8601 UTC strings. Migration path: repositories are the only SQL
 boundary — swap `app/db/` for PostgreSQL (+pgvector) without touching business logic.
+
+
+## Canonical entity spec (Constitution §N)
+Source / RawItem(immutable evidence) / MediaAsset / Claim(atomic assertion) / Event(real-world grouping) / EvidenceLink / VerificationRun / Story(editorial representation) / StoryVersion(evolving public state) / PublicationJob / PublicationLedger / PlatformAccount.
+Rules: one Event ↔ many RawItems/Claims؛ one Story evolves many Versions؛ **never recreate a Publication merely because a new RawItem arrives** (update Story→edit same remote message). Present-in-code: Source,RawItem,Claim,Event,Story,StoryVersion,Publication(jobs+ledger merged),media_cache(asset partial)؛ Missing entities: EvidenceLink,VerificationRun,PlatformAccount (Part 1/4/8).
