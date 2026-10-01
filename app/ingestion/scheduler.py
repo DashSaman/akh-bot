@@ -31,6 +31,49 @@ class Scheduler:
                 settings.telegram_ingest_session,
             )
 
+    async def reverification_loop(self, reverify_fn) -> None:
+        """DEDICATED 5-minute re-verification worker (not hidden in pipeline):
+        active VERIFYING/PROVISIONAL/HELD/CONFLICTING events + 60-min deadlines."""
+        import asyncio as _a
+        from app.db.repo import SettingsRepo as _SR, utcnow as _u
+        while True:
+            try:
+                _SR(self.db).set("reverify_last_run", _u())
+                await reverify_fn()
+            except Exception:  # noqa: BLE001
+                log.exception("reverify pass failed; continuing")
+            await _a.sleep(min(300, getattr(self.settings, "verify_recheck_interval_seconds", 300)))
+
+    async def watchdog_loop(self) -> None:
+        """Dedicated health supervisor: heartbeat staleness + orphan requeue marker."""
+        import asyncio as _a
+        from datetime import datetime as _dt, timezone as _tz
+        from app.db.repo import SettingsRepo as _SR, utcnow as _u
+        while True:
+            try:
+                _SR(self.db).set("watchdog_last_run", _u())
+                now = _dt.now(_tz.utc)
+                for key in ("ingest_last_run", "pipeline_last_run", "reverify_last_run", "jobs_last_run"):
+                    row = _SR(self.db).get(key)
+                    if row:
+                        try:
+                            age = (now - _dt.fromisoformat(row)).total_seconds()
+                            if age > 900:
+                                _SR(self.db).set("watchdog_alert:" + key, f"stale {int(age)}s")
+                                log.warning("watchdog: %s stale %ss", key, int(age))
+                        except ValueError:
+                            pass
+                # orphan eligible raw items -> force pipeline tick marker
+                orphans = self.db.query_one(
+                    "SELECT COUNT(*) c FROM raw_items WHERE processed_state='NEW'"
+                    " AND activation_ok=1 AND fetched_at <= datetime('now','-2 minutes')")["c"]
+                if orphans:
+                    _SR(self.db).set("orphan_backlog", str(orphans))
+                    log.warning("watchdog: %s orphan eligible items", orphans)
+            except Exception:  # noqa: BLE001
+                log.exception("watchdog pass failed; continuing")
+            await _a.sleep(120)
+
     async def soak_and_cleanup_loop(self) -> None:
         """Every 10min: persist soak metrics; at end write report file. No agent needed."""
         import json as _json, os as _os, sqlite3 as _sq

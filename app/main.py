@@ -68,6 +68,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     lambda: process_new_items(db, provider, brand, settings)), name="pipeline"),
                 loop.create_task(runner.loop(), name="jobs"),
                 loop.create_task(scheduler.soak_and_cleanup_loop(), name="soak"),
+                loop.create_task(scheduler.reverification_loop(
+                    lambda: process_new_items(db, provider, brand, settings)), name="reverify"),
+                loop.create_task(scheduler.watchdog_loop(), name="watchdog"),
             ]
             log.info("workers started (ingest/pipeline/jobs)")
         try:
