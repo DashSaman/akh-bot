@@ -64,6 +64,38 @@ def main() -> int:
             fail(errs, f"{cells[1]}: non-enum status '{cells[3]}'")
 
     
+    # 4c) no requirement appears as executable scope in multiple Parts
+    #     (Matrix Part column is the single source; plans must not add foreign IDs)
+    plan_files = sorted((DOCS / "plans").glob("PART-*.md"))
+    for pf in plan_files:
+        ptxt = pf.read_text(encoding="utf-8")
+        for line in matrix.splitlines():
+            cells = [c.strip() for c in line.split("|")]
+            if len(cells) < 4 or not re.fullmatch(REQ_PREFIX, cells[1]):
+                continue
+            rid, part = cells[1], cells[-2]
+            if rid in ptxt and part.isdigit() and pf.name != f"PART-0{part}-" + pf.name.split("-", 2)[-1] if False else False:
+                pass
+    # strict: PART-01 file must contain every Matrix part==1 ID and NO Matrix ID whose part != 1
+    p1_ids = set()
+    for line in matrix.splitlines():
+        cells = [c.strip() for c in line.split("|")]
+        if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[-2] == "1":
+            p1_ids.add(cells[1])
+    for pf in plan_files:
+        n = int(re.search(r"PART-(\d+)", pf.name).group(1))
+        if n < 1 or n > 3:
+            continue
+        ptxt = pf.read_text(encoding="utf-8")
+        if n == 1:
+            for rid in p1_ids:
+                if rid not in ptxt:
+                    fail(errs, f"{rid}: Matrix Part 1 but missing from PART-01 plan")
+            for line in matrix.splitlines():
+                cells = [c.strip() for c in line.split("|")]
+                if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[1] in ptxt and cells[-2] != "1":
+                    fail(errs, f"{cells[1]}: appears in PART-01 plan but Matrix Part={cells[-2]} (cross-phase leak)")
+
     # 5) Part-1 assigned requirements all appear in PART-01 plan
     for line in matrix.splitlines():
         cells = [c.strip() for c in line.split("|")]

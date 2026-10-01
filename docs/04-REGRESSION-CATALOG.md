@@ -27,7 +27,7 @@
 | REG-022 | duplicate old class shadowed fix | file surgery leftovers | INV-024 | single-definition import test | FIXED (import dedupe) — needs permanent test | RISK |
 | REG-023 | priority read as trust | conflated flags | INV-006 | separate-flags test | FIXED+TESTED |
 | REG-024 | allowlist not revalidated at execution | enqueue-only | INV-005 | execution recheck test | FIXED+TESTED |
-| REG-025 | branded card confused with original media | status labels | INV-024 | media-state labels | PARTIAL (labels exist; page shows rows only) |
+| REG-025 | branded card confused with original media | status labels | INV-024 | media-state labels (Part 6, CORE-006) | PARTIAL |
 | REG-026 | docs/runtime mismatch | stale docs | INV-024 | matrix sync | PARTIAL (this Part 0) |
 | REG-027 | PASS from tests w/o live evidence | reporting discipline | INV-023/024 | matrix runtime column | PARTIAL (matrix now enforces) |
 | REG-028 | same-event micro-post flood | every item → own event | INV-009/010 | burst-merge test | **OBSERVED (1020 events/2ch)** → Part 3 |

@@ -4,7 +4,7 @@
 این سند بالاترین مرجع الزامات مالک برای akh-bot/راسته‌نیوز است. **گزارش‌های پیاده‌سازی آن را باطل نمی‌کنند.** جدیدترین تصمیم مالک، الزام قدیمی‌تر متناقض را نسخ می‌کند.
 
 ## الزامات هستهٔ ساختاری (پیوند با ماتریس)
-CORE-001 موجودیت‌های قانونی (Source, RawItem, Claim, Event, Story, StoryVersion, PublicationJob/Ledger) · CORE-004 مدل StoryVersion · CORE-005 مدل outbox/ledger انتشار · CORE-006 موجودیت‌های پشتیبان (MediaAsset/EvidenceLink/VerificationRun/PlatformAccount)
+CORE-001 موجودیت‌های قانونی (Source, RawItem, Claim, Event, Story, StoryVersion, PublicationJob/Ledger) · CORE-004 مدل StoryVersion · CORE-005 مدل outbox/ledger انتشار · CORE-006 MediaAsset (P6) · CORE-007 EvidenceLink (P4) · CORE-008 VerificationRun (P4) · CORE-009 PlatformAccount (P8)
 
 ## شناسه‌های الزام (دسته‌ها)
 `CORE` هسته · `SRC` منابع · `INGEST` گردآوری · `CLAIM` ادعا · `EVENT` رویداد · `VERIFY` راستی‌آزمایی · `LANG` زبان · `EDIT` تحریریه · `MEDIA` رسانه · `PUB` انتشار · `PLATFORM` پلتفرم · `ADMIN` پنل · `AI` هوش مصنوعی · `AUT` خودمختاری · `WATCH` پایش · `SEC` امنیت · `PORT` قابلیت‌حمل · `WEB` وب‌سایت · `SEO` سئو · `GROWTH` رشد
