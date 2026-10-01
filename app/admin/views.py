@@ -174,8 +174,23 @@ async def dashboard(request: Request):
 async def sources_page(request: Request):
     if (r := await require_login(request)):
         return r
-    rows = SourcesRepo(_db(request)).list()
-    return templates.TemplateResponse(request, "admin/sources.html", _ctx(request, sources=rows))
+    db = _db(request)
+    rows = SourcesRepo(db).list()
+    import datetime as _dt
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+    enriched = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["last_check_at_ts"] = _dt.datetime.fromisoformat(r["last_check_at"]).timestamp() * 1e9 if r["last_check_at"] else 0
+        except ValueError:
+            d["last_check_at_ts"] = 0
+        d["sla_breach"] = db.query_one("SELECT value FROM settings WHERE key=?", (f"sla_breach:{r['id']}",)) is not None
+        enriched.append(d)
+    late = sum(1 for r in enriched if r["sla_breach"])
+    return templates.TemplateResponse(request, "admin/sources.html",
+                                      _ctx(request, sources=enriched, now_ts=now.timestamp() * 1e9, late_count=late))
 
 
 @router.post("/sources")

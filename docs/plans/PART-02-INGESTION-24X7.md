@@ -10,5 +10,7 @@ Goal: close the only ingestion gap (Telethon realtime) and formalize checkpoints
    - Runtime: only after owner provides TELEGRAM_INGEST_* — acceptance: fresh channel post → raw_item within 5s (log evidence), WEB_FALLBACK stays as automatic fallback.
    - Commit boundary: schema+mock first (deployable now), live enable in separate commit.
 3. **T3 source-SLA enforcement** — watchdog marks SOURCE_SLA_BREACH + forced immediate reconcile; admin Sources header shows «منابع عقب‌افتاده». Test: injected stale source triggers marker.
-## Exit
-INGEST matrix rows DONE (003 stays BLOCKED_EXTERNAL with mock DONE); lag=0 sustained; REG-002 class tests green.
+## Exit (corrected semantics — PART-2 spec §0/§39)
+- IF owner Telethon session available AND live acceptance passes: INGEST-003 = DONE, PART 2 = PASS.
+- IF session absent (current state): all non-credential work (T1/T3, T2 mock-tested) DONE + deployed; INGEST-003 = **BLOCKED_EXTERNAL**; **PART 2 = BLOCKED_EXTERNAL** (not FAIL, not PASS).
+- WEB_FALLBACK never downgraded (Tier-1 = 30s, sweep ≤120s, REG-002 pagination preserved).

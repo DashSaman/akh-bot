@@ -110,6 +110,13 @@ class Scheduler:
         stats = {"sources": len(sources), "new_items": 0}
         for source in sources:
             try:
+                from app.ingestion.sla import evaluate_sla
+                from app.db.repo import utcnow as _u
+
+                self.db.execute("UPDATE sources SET last_check_at=? WHERE id=?",
+                                (_u(), source["id"]))
+                evaluate_sla(self.db, source["id"],
+                             recovery=bool(summary_ok := False))
                 if source["platform"] == "rss":
                     from app.ingestion.rss import fetch_rss_source
 
@@ -124,6 +131,11 @@ class Scheduler:
                     elif self.ingestor is not None:
                         summary = await self.ingestor.reconcile_source(source, self.db)
                         stats["new_items"] += summary.get("new", 0)
+                ok = not summary.get("error") if isinstance(summary, dict) else True
+                evaluate_sla(self.db, source["id"], recovery=ok)
+                self.db.execute(
+                    "UPDATE sources SET consecutive_failures=CASE WHEN ? THEN 0 ELSE consecutive_failures+1 END WHERE id=?",
+                    (1 if ok else 0, source["id"]))
             except Exception:  # noqa: BLE001 — source isolation
                 log.exception("source %s ingest failed", source["id"], extra={"source_id": source["id"]})
         return stats

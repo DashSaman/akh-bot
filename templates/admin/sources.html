@@ -95,7 +95,8 @@ RSS: <b>{{ sources | selectattr('platform','equalto','rss') | list | length }}</
       </form>
     </td>
     <td>{{ 'روشن' if s.enabled else 'خاموش' }}</td>
-    <td>{{ '%.2f' | format(s.health_score) }}</td>
+    <td>{{ '%.2f' | format(s.health_score) }}{% if s.last_check_at %}{% set age_ns = (now_ts - s.last_check_at_ts) // 1000000000 %}{% if age_ns > (s.polling_interval_seconds or 120) * 4 %} <span class="badge danger">SLA_BREACH</span>{% elif age_ns > (s.polling_interval_seconds or 120) * 3 %} <span class="badge warn">بازبینی</span>{% else %} <span class="badge ok">سالم</span>{% endif %}{% endif %}</td>
+    <td class="small">ck: {{ s.last_remote_id or '—' }}{% if s.sla_breach %} <span class="badge danger">SLA</span>{% endif %}</td>
     <td class="small">{{ s.last_success_at or '—' }}{% if s.last_error %}<div class="error small">{{ s.last_error }}</div>{% endif %}</td>
     <td>
       <form method="post" action="/admin/sources/{{ s.id }}/toggle" class="inline-form">

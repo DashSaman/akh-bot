@@ -74,6 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 loop.create_task(scheduler.reverification_loop(
                     lambda: process_new_items(db, provider, brand, settings)), name="reverify"),
                 loop.create_task(scheduler.watchdog_loop(), name="watchdog"),
+                loop.create_task(_telethon_task(db, settings), name="telethon"),
             ]
             log.info("workers started (ingest/pipeline/jobs)")
         try:
@@ -106,6 +107,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(web_router)
     return app
+
+
+async def _telethon_task(db, settings):
+    from app.ingestion.telethon_listener import TelethonListener
+
+    tl = TelethonListener(db, settings)
+    try:
+        await tl.run()  # no creds → returns immediately; WEB_FALLBACK authoritative
+    except Exception:  # noqa: BLE001 — never crash other workers (§20)
+        pass
 
 
 def _pkg_path(sub: str) -> str:
