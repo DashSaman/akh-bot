@@ -3,7 +3,10 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 
 | ID | Requirement | Status | Code Evidence | Test Evidence | Runtime Evidence | Docs | Last SHA | Blocker/Notes | Part |
 |---|---|---|---|---|---|---|---|---|---|
-| CORE-001 | 5-entity model Source/RawItem/Claim/Event/Story/Publication | PARTIAL | app/db/migrations/001-005, app/db/repo.py | tests/test_pipeline.py | DB rows exist | DATA-MODEL.md | 9affb54 | EvidenceLink/VerificationRun/MediaAsset-as-entity incomplete | 1 |
+| CORE-001 | Canonical core entities exist (Source, RawItem, Claim, Event, Story, StoryVersion, PublicationJob/Ledger) | PARTIAL | app/db/migrations/001-005, app/db/repo.py | tests/test_pipeline.py | DB rows exist | DATA-MODEL.md | 9affb54 | boundaries leak via legacy draft blob | 1 |
+| CORE-004 | StoryVersion model: one Story evolves many versions; editorial content only in structured fields | PARTIAL | StoriesRepo.set_lifecycle, story_versions table | test_autonomy update-in-place | versions live | DATA-MODEL.md | 9affb54 | legacy drafts still carry preformatted body blob | 1 |
+| CORE-005 | Publication outbox/ledger model: job→ledger row→remote mapping; no re-publication on new RawItem | DONE | publications UNIQUE + jobs table + handler edit-path | test_publisher idempotency+edit | 86 SENT mapped; retry=0 dup | PUBLISHING.md | 9affb54 | — | — |
+| CORE-006 | Supporting entities: MediaAsset (partial), EvidenceLink, VerificationRun, PlatformAccount | PARTIAL | media_cache table | test_media (asset) | media rows | DATA-MODEL.md | 9affb54 | EvidenceLink/VerificationRun/PlatformAccount absent | 8 |
 | CORE-002 | No RawItem → publisher direct path | PARTIAL | pipeline renders only via build_public_text | tests/test_language_gate.py | foreign=0 live | — | 9affb54 | direct-story admin path exists (scripts) without canonical Story render for all fields | 1 |
 | CORE-003 | Public output only from canonical Story/StoryVersion | PARTIAL | StoriesRepo.create/set_lifecycle | tests/test_source_control.py | SENT 86 mapped | — | 9affb54 | some drafts still carry body blob, not pure structured fields | 1 |
 | SRC-001 | Owner allowlist only (INV-005) | DONE | repo.due() OWNER_ENABLED filter; jobs runner execution-check | test_source_control.py::disabled… | naya=1/yashar=2 enabled, others DISABLED | SOURCES.md | 9affb54 | settings marker key empty (cosmetic) | — |
@@ -46,18 +49,18 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | ADMIN-002 | AI admin page | MISSING | — | — | — | — | 9affb54 | Part 7 | 7 |
 | ADMIN-003 | Manual news intake (web+inbox) | MISSING | — | — | — | — | 9affb54 | Part 7 | 7 |
 | ADMIN-004 | Health/24-7 dashboard page | PARTIAL | doctor.sh + heartbeats in DB | — | doctor exit 0 | — | 9affb54 | full admin page missing | 7 |
-| AI-001 | Optional, zero-cost router | DONE(arch) | integrations/llm/router.py | — | 0 providers → deterministic | AI-USE-POLICY | 9affb54 | no keys configured | 5 |
-| AI-002 | Provider failover A→B→C→det | DONE(arch) | router loop | — | untested live (no keys) | — | 9affb54 | BLOCKED for live-proof | 5 |
-| AI-003 | Factual consistency audit of AI output | DONE | translator.consistent_with_source | — | — | — | 9affb54 | — | 5 |
+| AI-001 | Optional, zero-cost router | PARTIAL | integrations/llm/router.py | — | 0 providers → deterministic | AI-USE-POLICY | 9affb54 | no keys configured | 5 |
+| AI-002 | Provider failover A→B→C→det | PARTIAL | router loop | — | untested live (no keys) | — | 9affb54 | BLOCKED for live-proof | 5 |
+| AI-003 | Factual consistency audit of AI output | PARTIAL | translator.consistent_with_source | unit only | — | — | 9affb54 | — | 5 |
 | AUT-001 | 24/7 in-container workers, no agent | DONE | lifespan 6 tasks + restart unless-stopped | restart tests | soak metrics jsonl | AUTONOMY | 9affb54 | — | — |
 | AUT-002 | Watchdog + orphan + SLA markers | DONE | watchdog_loop | test suite | hb fresh, orphan=0 | — | 9affb54 | — | — |
 | WATCH-001 | Soak 24h metrics service-collected | DONE | soak_and_cleanup_loop | — | soak-metrics.jsonl growing | — | 9affb54 | — | — |
 | SEC-001 | Persian HTML escaping, CSRF, throttle | DONE | to_telegram_html, CSRF on all admin POST | tests | live battery PASS | SECURITY.md | 9affb54 | — | — |
 | PORT-001 | Instance portability (ledger/watermark/priority) | DONE | seed.py, verify_instance.sh | test_portability.py | verify 12/12 PASS | MIGRATION.md | 9affb54 | — | 9 |
-| PORT-002 | DR round-trip | DONE | backup/restore scripts | test_backup.py | restore drill = unit-level only | — | 9affb54 | full prod drill pending | 9 |
+| PORT-002 | DR round-trip | PARTIAL | backup/restore scripts | test_backup.py | restore drill = unit-level only (full prod drill pending) | — | 9affb54 | full prod drill pending | 9 |
 | WEB-001 | Public site pages + trust pages | DONE | web/routes.py | test_seo.py | preview mode live | — | 9affb54 | domain undecided → PREVIEW | 10 |
 | SEO-001 | Single schema graph, sitemaps, RSS, robots | DONE | seo/seo.py | test_seo.py | endpoints live | SEO-GEO-AEO | 9affb54 | — | 10 |
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
-## Tallies
-DONE 31 · PARTIAL 9 · BROKEN 1 · MISSING 7 · BLOCKED_EXTERNAL 3 (INGEST-003, LANG-003, PLATFORM-002)
+## Tallies (recomputed, evidence-rule enforced)
+DONE 33 · PARTIAL 15 · BROKEN 1 · MISSING 6 · BLOCKED_EXTERNAL 3 — total 58
