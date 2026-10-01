@@ -273,6 +273,7 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
     }
     source_roles = {s["id"]: s["source_role"] for s in SourcesRepo(db).list()}
     pub_policies = {s["id"]: s.get("publication_policy", "AUTO") for s in SourcesRepo(db).list()}
+    src_langs = {s["id"]: (s.get("language") or "und") for s in SourcesRepo(db).list()}
     llm_allowed = provider is not None and llm_budget_ok(db, settings)
     for event in events_repo.list(limit=80):
         if event["status"] not in ACTIVE_EVENT_STATUSES:

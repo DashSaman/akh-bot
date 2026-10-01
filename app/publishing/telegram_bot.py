@@ -174,6 +174,8 @@ class TelegramBotPublisher:
                 "username": chat.get("username")}
 
     async def send_message(self, text: str) -> dict[str, Any]:
+        if not publisher_language_gate(text):
+            return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
         data = await self._api("sendMessage", {
             "chat_id": self.chat_id, "text": to_telegram_html(text)[:4096], "parse_mode": "HTML",
             "disable_web_page_preview": True})
@@ -184,6 +186,8 @@ class TelegramBotPublisher:
     async def send_media(self, path, caption, video=False):
         """sendPhoto/sendVideo with Persian newsroom caption (one coherent post)."""
         import os as _os
+        if not publisher_language_gate(caption):
+            return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
         field = 'video' if video else 'photo'
         try:
             fh = open(path, 'rb')
@@ -204,6 +208,8 @@ class TelegramBotPublisher:
 
 
     async def edit_message(self, message_id: str, text: str) -> dict[str, Any]:
+        if not publisher_language_gate(text):
+            return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
         try:
             payload = {"chat_id": self.chat_id, "message_id": int(message_id),
                        "text": to_telegram_html(text)[:4096], "parse_mode": "HTML",
@@ -246,33 +252,73 @@ def persian_ratio(text: str) -> float:
 _PERSIAN_ONLY_LETTERS = set("پچژگ")
 
 
-_ARABIC_ONLY_LETTERS = set("يكةآ")  # ي ك ة — Arabic-specific forms
+_ARABIC_ONLY = set("يكة")  # ي ك ة only — forms NEVER valid in Persian
+_HEBREW = range(0x05D0, 0x05F0)
+_AR_STOP = ("في", "من", "على", "عن", "أن", "الى", "التي", "الذي", "هذا", "هذه", "مع", "قد", "لا", "ما")
+_FOOTER_MARKS = ("راسته؟", "@RastehNews", "🆔")
+
+
+def story_content_language_check(text: str) -> bool:
+    """CONTENT-level Persian check (§5/§6): strip footer/source/URLs/handles first,
+    then reject Arabic morphology (ي/ك/ة...), Arabic stopwords, Hebrew, Latin-dominant."""
+    import re as _r
+
+    lines = []
+    for ln in (text or "").split(chr(10)):
+        t = ln.strip()
+        if not t:
+            continue
+        if any(m in t for m in _FOOTER_MARKS) or t.startswith(("منبع:", "منابع:", "—")):
+            continue
+        t = _r.sub(r"https?://\S+|t\.me/\S+|@[A-Za-z0-9_]{3,}", " ", t)
+        t = _r.sub(r"[🀀-🫿‌‏‎*#]+", " ", t)
+        if t.strip():
+            lines.append(t.strip())
+    content = " ".join(lines)
+    if not content:
+        return False
+    words = content.split()
+    if not words:
+        return False
+    if any(ch in _ARABIC_ONLY for ch in content):
+        return False
+    ar_stop_hits = sum(1 for w in words if w in _AR_STOP)
+    if ar_stop_hits >= max(1, len(words) // 8):
+        return False
+    heb = sum(1 for ch in content if ord(ch) in _HEBREW)
+    if heb >= 2:
+        return False
+    letters = [c for c in content if c.isalpha()]
+    if not letters:
+        return False
+    fa = sum(1 for c in letters if "؀" <= c <= "ۿ")
+    lat = sum(1 for c in letters if c.isascii() and c.isalpha())
+    if lat / len(letters) > 0.3:
+        return False
+    return fa / len(letters) >= 0.6
 
 
 def is_persian_public_text(text: str) -> bool:
-    """LANGUAGE GATE: public text must be Persian.
-    - Arabic script w/o any Persian-exclusive letter + Arabic-only forms → reject
-    - Latin/Hebrew/etc paragraphs fail the ratio gate
-    Persian may legitimately lack پچژگ, but then it must also lack Arabic ي/ك/ة."""
-    if not text or not text.strip():
-        return False
-    if persian_ratio(text) < 0.55:
-        return False
-    has_persian_excl = any(c in _PERSIAN_ONLY_LETTERS for c in text)
-    has_arabic_only = any(c in _ARABIC_ONLY_LETTERS for c in text)
-    if has_arabic_only and not has_persian_excl:
-        return False  # raw Arabic
-    return True
+    """Backward-compatible alias: content-level check (footer cannot fool it)."""
+    return story_content_language_check(text)
 
 
-def to_telegram_html(text: str) -> str:
-    """Convert our **bold** markers to <b>, escape everything else (no raw ** ever)."""
-    import html as _h
-    parts = []
-    for i, seg in enumerate((text or "").split("**")):
-        seg = _h.escape(seg)
-        parts.append(("<b>%s</b>" % seg) if i % 2 == 1 else seg)
-    return "".join(parts)
+def publisher_language_gate(text: str) -> bool:
+    """LAST-CHANCE fail-closed gate before ANY public API call."""
+    return story_content_language_check(text)
+
+
+def persian_ratio(text: str) -> float:
+    """Share of letters that are Persian-script (fa vs ar share the block)."""
+    import re as _r
+    letters = [c for c in (text or "") if c.isalpha()]
+    if not letters:
+        return 1.0
+    fa = sum(1 for c in letters if "؀" <= c <= "ۿ")
+    return fa / len(letters)
+
+
+_PERSIAN_ONLY_LETTERS = set("پچژگ")
 
 
 _TOPIC_EMOJI = [

@@ -33,7 +33,7 @@ def test_send_photo_with_caption(db, tmp_path, monkeypatch):
     r = asyncio.run(pub.send_media(str(img), "🟢 <b>تیتر</b>\n\nمتن\n\nمنبع: نایا"))
     assert r["ok"] and r["message_id"] == 55
     assert "sendPhoto" in calls["url"] and b"parse_mode=HTML" in calls["body"].replace(b"+", b" ") or "caption" in str(calls["body"])
-    r2 = asyncio.run(pub.send_media(str(img), "c", video=True))
+    r2 = asyncio.run(pub.send_media(str(img), "کپشن فارسی ویدیو آزمون", video=True))
     assert "sendVideo" in calls["url"]
 
 

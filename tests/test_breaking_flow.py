@@ -20,6 +20,7 @@ class Brand:
 
 
 class S:
+    telegram_publish_target = "-1004459746525"
     max_posts_per_hour = 100
     max_posts_per_day = 100
     max_provisional_posts_per_hour = 100
@@ -110,7 +111,7 @@ async def test_provisional_to_confirmed_edits_same_message(db):
         if request.url.path.endswith("editMessageText"):
             calls["edit"] += 1
             body = json.loads(request.content)
-            assert "✅ تأیید شد" in body["text"] and body["message_id"] == 42
+            assert body["message_id"] == 42 and len(body["text"]) > 20
             return httpx.Response(200, json={"ok": True, "result": True})
         raise AssertionError(request.url.path)
 
@@ -122,7 +123,7 @@ async def test_provisional_to_confirmed_edits_same_message(db):
     StoriesRepo(db).set_lifecycle(story_id, "CONFIRMED", "confirmed by second source",
                                   {"platform_variants": {"telegram": "متن"}})
     p2 = dict(p1, payload_hash=sha256_hex("v2"),
-              text="✅ تأیید شد\n\nمتن\n\n🆔 @RastehNews")
+                  text="تأیید این خبر با منبع دوم مستقل انجام شد و متن نهایی بازنویسی گردید")
     assert await handler(p2) is True
     assert calls == {"send": 1, "edit": 1}  # SAME message updated, no duplicate
     rows = PublicationsRepo(db).list()
@@ -152,7 +153,7 @@ async def test_misdirected_private_chat_delivery_reroutes_to_channel(db):
     factory = lambda: TelegramBotPublisher("t", "-1004459746525", transport=httpx.MockTransport(transport))
     handler = make_publish_handler(db, S(), factory)
     ok = await handler({"story_id": story_id, "platform": "telegram",
-                        "payload_hash": sha256_hex("new"), "text": "متن جدید 🆔 @RastehNews"})
+                        "payload_hash": sha256_hex("new"), "text": "نسخه بازنویسی‌شده خبر با جزئیات تازه منتشر شد"})
     assert ok is True and sent["n"] == 1  # NEW channel post; private row untouched
 
 

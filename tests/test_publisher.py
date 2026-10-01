@@ -58,7 +58,7 @@ async def test_publish_once_then_idempotent_retry(db):
     transport = httpx.MockTransport(_ok_send)
     handler = _handler_for(db, S(), transport)
     payload = {"story_id": story_id, "platform": "telegram",
-               "payload_hash": sha256_hex("t1"), "text": "سلام"}
+               "payload_hash": sha256_hex("t1"), "text": "خبر فارسی آزمون یک"}
     assert await handler(payload) is True
     pubs = PublicationsRepo(db).list()
     assert pubs[0]["status"] == "SENT" and pubs[0]["remote_id"] == "42"
@@ -74,7 +74,7 @@ async def test_publish_failure_retries_via_job_backoff(db):
     transport = httpx.MockTransport(_fail_send)
     handler = _handler_for(db, S(), transport)
     payload = {"story_id": story_id, "platform": "telegram",
-               "payload_hash": sha256_hex("t2"), "text": "سلام"}
+               "payload_hash": sha256_hex("t2"), "text": "خبر فارسی آزمون دو"}
     assert await handler(payload) is False  # failure recorded
     rows = PublicationsRepo(db).list()
     assert rows[0]["status"] == "FAILED"
@@ -86,7 +86,7 @@ async def test_publish_failure_retries_via_job_backoff(db):
     pubs_repo = PublicationsRepo(db)
     pubs_repo.upsert(story_id, "telegram", text, 1)
     jobs.enqueue("publish_telegram", {"story_id": story_id, "platform": "telegram",
-                                      "payload_hash": text, "text": "x"},
+                                      "payload_hash": text, "text": "متن خبر فارسی نمونه برای آزمون انتشار"},
                  dedupe_key=f"pub:tg:{story_id}:{text[:16]}")
     ok_transport = httpx.MockTransport(_ok_send)
     runner.register("publish_telegram", _handler_for(db, S(), ok_transport))
@@ -105,13 +105,13 @@ async def test_pause_blocks_publishing_but_not_collection(db):
     transport = httpx.MockTransport(_ok_send)
     handler = _handler_for(db, S(), transport)
     ok = await handler({"story_id": story_id, "platform": "telegram",
-                        "payload_hash": sha256_hex("t4"), "text": "x"})
+                        "payload_hash": sha256_hex("t4"), "text": "متن خبر فارسی نمونه برای آزمون انتشار"})
     assert ok is True  # skipped, not failed — and no ledger row is even created while paused
     assert PublicationsRepo(db).list() == []
     # global kill switch
     SettingsRepo(db).set("pause_all", "1")
     ok = await handler({"story_id": story_id, "platform": "telegram",
-                        "payload_hash": sha256_hex("t5"), "text": "x"})
+                        "payload_hash": sha256_hex("t5"), "text": "متن خبر فارسی نمونه برای آزمون انتشار"})
     assert ok is True
     assert PublicationsRepo(db).sent_since(datetime.now(timezone.utc) - timedelta(hours=1)) == 0
 
@@ -136,10 +136,10 @@ async def test_rate_limit_blocks_excess(db):
         max_posts_per_day = 100
 
     handler = _handler_for(db, Tight(), httpx.MockTransport(_ok_send))
-    p1 = {"story_id": story_id, "platform": "telegram", "payload_hash": sha256_hex("a"), "text": "x"}
+    p1 = {"story_id": story_id, "platform": "telegram", "payload_hash": sha256_hex("a"), "text": "خبر فارسی الف برای آزمون انتشار"}
     assert await handler(p1) is True
     # same story + different payload now EDITS the prior message (lifecycle policy),
     # so the hourly cap is exercised with a SECOND story:
     story2 = _story(db)
-    p2 = {"story_id": story2, "platform": "telegram", "payload_hash": sha256_hex("b"), "text": "y"}
+    p2 = {"story_id": story2, "platform": "telegram", "payload_hash": sha256_hex("b"), "text": "خبر فارسی ب برای آزمون سقف"}
     assert await handler(p2) is False  # hourly cap reached → retried later, not dropped
