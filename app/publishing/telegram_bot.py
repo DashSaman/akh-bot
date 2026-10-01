@@ -18,10 +18,10 @@ _SOURCE_LINE_RE = re.compile(r"^\s*(?:📖\s*)?(?:منبع|source)\s*[:：]", re
 
 STATUS_ICONS = {
     "PROVISIONAL": "🔴 در حال راستی‌آزمایی",
-    "CONFIRMED": "✅ تأیید شد",
-    "CONFIRMED_OFFICIAL": "📢 اعلام رسمی",
+    "CONFIRMED": "",  # ordinary confirmed news = clean post, no label clutter
+    "CONFIRMED_OFFICIAL": "📣 اعلام رسمی",
     "CONFLICTING": "🟠 گزارش‌های متناقض",
-    "RETRACTED": "❌ تکذیب شد",
+    "RETRACTED": "❌ اصلاح / تکذیب",
     "UNCONFIRMED_UPDATE": "⚠️ گزارش اولیه تأیید نشد",
     "UNVERIFIED_EXPIRED": "⚠️ تا این لحظه تأیید مستقل نشد",
 }
@@ -109,7 +109,7 @@ class TelegramBotPublisher:
 
     async def send_message(self, text: str) -> dict[str, Any]:
         data = await self._api("sendMessage", {
-            "chat_id": self.chat_id, "text": text[:4096],
+            "chat_id": self.chat_id, "text": to_telegram_html(text)[:4096], "parse_mode": "HTML",
             "disable_web_page_preview": True})
         if data.get("ok"):
             return {"ok": True, "message_id": data["result"]["message_id"]}
@@ -118,7 +118,8 @@ class TelegramBotPublisher:
     async def edit_message(self, message_id: str, text: str) -> dict[str, Any]:
         try:
             payload = {"chat_id": self.chat_id, "message_id": int(message_id),
-                       "text": text[:4096], "disable_web_page_preview": True}
+                       "text": to_telegram_html(text)[:4096], "parse_mode": "HTML",
+                       "disable_web_page_preview": True}
         except ValueError:
             return {"ok": False, "error": "bad message id"}
         data = await self._api("editMessageText", payload)
@@ -142,3 +143,54 @@ def telegram_text_for_story(draft: dict[str, Any], signature: str) -> str:
     if signature:
         lines += ["", signature]
     return "\n".join(lines)
+
+
+_FA_RE = None
+def _fa_pattern():
+    global _FA_RE
+    if _FA_RE is None:
+        import re as _r
+        _FA_RE = _r.compile(r"[؀-ۿ]")
+    return _FA_RE
+
+
+def persian_ratio(text: str) -> float:
+    """Share of letters that are Persian-script (fa vs ar share the block)."""
+    import re as _r
+    letters = [c for c in (text or "") if c.isalpha()]
+    if not letters:
+        return 1.0
+    fa = sum(1 for c in letters if "؀" <= c <= "ۿ")
+    return fa / len(letters)
+
+
+_PERSIAN_ONLY_LETTERS = set("پچژگ")
+
+
+_ARABIC_ONLY_LETTERS = set("يكةآ")  # ي ك ة — Arabic-specific forms
+
+
+def is_persian_public_text(text: str) -> bool:
+    """LANGUAGE GATE: public text must be Persian.
+    - Arabic script w/o any Persian-exclusive letter + Arabic-only forms → reject
+    - Latin/Hebrew/etc paragraphs fail the ratio gate
+    Persian may legitimately lack پچژگ, but then it must also lack Arabic ي/ك/ة."""
+    if not text or not text.strip():
+        return False
+    if persian_ratio(text) < 0.55:
+        return False
+    has_persian_excl = any(c in _PERSIAN_ONLY_LETTERS for c in text)
+    has_arabic_only = any(c in _ARABIC_ONLY_LETTERS for c in text)
+    if has_arabic_only and not has_persian_excl:
+        return False  # raw Arabic
+    return True
+
+
+def to_telegram_html(text: str) -> str:
+    """Convert our **bold** markers to <b>, escape everything else (no raw ** ever)."""
+    import html as _h
+    parts = []
+    for i, seg in enumerate((text or "").split("**")):
+        seg = _h.escape(seg)
+        parts.append(("<b>%s</b>" % seg) if i % 2 == 1 else seg)
+    return "".join(parts)

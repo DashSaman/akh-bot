@@ -26,6 +26,7 @@ from app.newsroom.models import (
 )
 from app.verification.gates import (decide_claim_state, event_can_auto_publish, is_high_risk,
                                     classify_priority, extract_headline, is_valid_headline)
+from app.publishing.telegram_bot import is_persian_public_text
 from app.publishing.fanout import distribution_plan
 
 log = logging.getLogger("akh.pipeline")
@@ -154,12 +155,12 @@ def merge_and_verify_claims(db: Database, event_id: int,
 
 
 def _public_text_for(det, brand, mode="hidden"):
-    from app.publishing.telegram_bot import build_public_text
+    from app.publishing.telegram_bot import build_public_text, is_persian_public_text
     return build_public_text(det["lifecycle"], det["body"], brand, mode, True)
 
 
 def _create_and_enqueue(db, settings, brand, event_id, det):
-    from app.publishing.telegram_bot import build_public_text
+    from app.publishing.telegram_bot import build_public_text, is_persian_public_text
     text = build_public_text(det["lifecycle"], det["body"], brand, "hidden", True)
     draft = {"headline": det["body"].split("chr(10)")[0][:120], "lead": det["body"],
              "platform_variants": {"telegram": text},
@@ -172,7 +173,7 @@ def _create_and_enqueue(db, settings, brand, event_id, det):
 
 
 def _publish_deterministic(db, settings, brand, story, det, lifecycle):
-    from app.publishing.telegram_bot import build_public_text
+    from app.publishing.telegram_bot import build_public_text, is_persian_public_text
     text = build_public_text(det["lifecycle"], det["body"], brand, "hidden", True)
     draft = {"headline": det["body"].split("chr(10)")[0][:120], "lead": det["body"],
              "platform_variants": {"telegram": text},
@@ -212,6 +213,8 @@ def llm_budget_ok(db: Database, settings: Any) -> bool:
             return False
     return True
 
+
+_PERSIAN_LETTERS = set("پچژگآ")
 
 ACTIVE_EVENT_STATUSES = ("NEW", "CLUSTERED", "READY", "HELD")
 
@@ -315,6 +318,10 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
                 continue
             det = deterministic_story_text("CONFIRMED", event, summary_claims, eligible, source_roles)
             det["body"] = "**" + headline + "**" + chr(10) + chr(10) + det["body"]
+            if not is_persian_public_text(det["body"]):
+                events_repo.set_status(event["id"], "HELD")
+                log.info("NEEDS_LANGUAGE_PROCESSING event %s", event["id"], extra={"event_id": event["id"]})
+                continue
             story_id = _create_and_enqueue(db, settings, brand, event["id"], det)
             events_repo.set_status(event["id"], "PUBLISHED")
             summary["stories"] += 1
@@ -387,7 +394,7 @@ def _resolve_deadlines(db: Database, settings: Any, brand: Brand) -> int:
     deadline_min = getattr(settings, "verifying_deadline_minutes", 60)
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=deadline_min)).isoformat(timespec="seconds")
     fixed = 0
-    from app.publishing.telegram_bot import build_public_text
+    from app.publishing.telegram_bot import build_public_text, is_persian_public_text
     from app.publishing import fanout as _fo
     repo = StoriesRepo(db)
     for st in db.query(
