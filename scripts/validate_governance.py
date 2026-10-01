@@ -83,19 +83,33 @@ def main() -> int:
         if len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[-2] == "1":
             p1_ids.add(cells[1])
     for pf in plan_files:
-        n = int(re.search(r"PART-(\d+)", pf.name).group(1))
+        m = re.search(r"PART-(\d+)", pf.name)
+        if not m:
+            continue
+        n = int(m.group(1))
         if n < 1 or n > 3:
             continue
         ptxt = pf.read_text(encoding="utf-8")
+        # ownership rows in this plan's coverage map: | ID | ... lines
+        owned = {cells[1] for line in ptxt.splitlines()
+                 for cells in [[c.strip() for c in line.split("|")]]
+                 if len(cells) >= 3 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[0] == "" and line.startswith("| ")}
         if n == 1:
             for rid in p1_ids:
                 if rid not in ptxt:
                     fail(errs, f"{rid}: Matrix Part 1 but missing from PART-01 plan")
+        if n in (2, 3):
+            ids_n = [cells2[1] for line2 in matrix.splitlines()
+                     for cells2 in [[c.strip() for c in line2.split("|")]]
+                     if len(cells2) >= 4 and re.fullmatch(REQ_PREFIX, cells2[1]) and cells2[-2] == str(n)]
+            for rid in ids_n:
+                if rid not in ptxt:
+                    fail(errs, f"{rid}: Matrix Part {n} but missing from PART-0{n} plan")
             for line in matrix.splitlines():
                 cells = [c.strip() for c in line.split("|")]
-                if (len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[1] in ptxt
-                        and cells[-2] != "1" and cells[3] != "DONE"):
-                    fail(errs, f"{cells[1]}: appears in PART-01 plan but Matrix Part={cells[-2]} (cross-phase leak)")
+                if (len(cells) >= 4 and re.fullmatch(REQ_PREFIX, cells[1]) and cells[1] in owned
+                        and cells[-2] != str(n) and cells[3] != "DONE"):
+                    fail(errs, f"{cells[1]}: coverage-claimed in PART-0{n} plan but Matrix Part={cells[-2]} (cross-phase ownership leak)")
 
     # 4d) CURRENT-STATUS structural rules
     cs = (DOCS / "00-CURRENT-STATUS.md").read_text(encoding="utf-8")
