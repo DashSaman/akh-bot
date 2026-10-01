@@ -1,8 +1,9 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-01 15:45Z, PART 2.1)
 
-- **Repository HEAD:** 1fd0200 (docs/governance commits may run ahead of runtime — valid)
-- **Production runtime SHA:** 1fd0200 (verified in-container; equal at this snapshot)
-- **PART:** 1 = PASS (validator-enforced) · PART 2 = BLOCKED_EXTERNAL (actionable COMPLETE; INGEST-003 awaits owner Telethon session)
+- **Repository HEAD:** 8668402 (docs/governance commits may run ahead of runtime — valid)
+- **Production runtime SHA:** 8668402 (P3-A deployed; verified in-container)
+- **PART:** 1 = PASS · PART 2 = BLOCKED_EXTERNAL · **PART 3 = IN PROGRESS — P3-A complete, P3-B next**
+- **EVENT_ENGINE_V2_ENABLED:** false (P3-A deployed inactive; old pipeline authoritative)
 
 ## Runtime snapshot @2026-10-01 15:45Z (single read-only query set)
 - Publication ledger SENT: **92**
