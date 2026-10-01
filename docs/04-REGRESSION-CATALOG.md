@@ -4,7 +4,7 @@
 | ID | Symptom | Root cause | Invariant | Required test | Status @9affb54 |
 |---|---|---|---|---|---|
 | REG-001 | News sent to bot private chat | env line-glue → publish target fell back to private | INV-004/022 | dest type=channel validation | FIXED+TESTED |
-| REG-002 | t.me/s >20 msgs lost | single-page fetch | INV (no lost news) | pagination watermark | FIXED+TESTED |
+| REG-002 | t.me/s >20 msgs lost | single-page fetch | INV (no lost news) | pagination watermark + overlap fetch_window (test_checkpoints) | FIXED+TESTED (@69059ab live: ck==wm, 0 dup keys) |
 | REG-003 | HELD events starved | status filter excluded HELD | INV-009 | reverify includes HELD | FIXED+TESTED |
 | REG-004 | Existing-story skipped on new evidence | `if story: continue` | INV-012 | existing-story update test | FIXED+TESTED |
 | REG-005 | Stale FIFO backlog blocked breaking | no priority/freshness | INV (breaking first) | priority + STALE tests | FIXED+TESTED |

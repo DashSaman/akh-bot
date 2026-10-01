@@ -1,10 +1,10 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH ONLY (2026-10-01 13:50Z)
 
-- **Production SHA:** 6956ece (verified in-container @PART1.1) (=repo HEAD؛ healthy؛ restart=unless-stopped؛ Docker enabled)
-- **PART:** 1 = PASS (derived: all 7 assigned Matrix IDs DONE — validator-enforced)
+- **Production SHA:** 69059ab (verified in-container @PART-2) (=repo HEAD؛ healthy؛ restart=unless-stopped؛ Docker enabled)
+- **PART:** 1 = PASS (validator-enforced) · **PART 2 = BLOCKED_EXTERNAL** (all actionable T1/T2-mock/T3 DONE+deployed; INGEST-003 awaits owner Telethon session for live <5s proof; WEB_FALLBACK authoritative @30s Tier-1)
 - **سنجه‌های متمایز زمان-اجرأ (@6956ece):** Publication ledger SENT: **89** · Jobs DONE: **156** · تلگرام remote نگاشت‌شده (SENT با remote_id در کانال): **86** — سه متریک متمایز؛ «SENT» بدون پیشوند یعنی لجر
 - **Sources (allowlist ON):** 1=naya_foriraq 2=withyashar (OWNER_ENABLED/AUTO/30s)؛ بقیه OWNER_DISABLED
-- **Collector mode:** Telegram=WEB_FALLBACK (TELETHON_AUTH_REQUIRED)؛ RSS idem for disabled feeds
+- **Collector mode:** Telegram=WEB_FALLBACK (TELETHON_AUTH_REQUIRED — listener deployed, mock-proven, inactive w/o session)؛ checkpoints: naya ck=92254/wm=92254 · yashar ck=24680/wm=24680 (monotonic, restart-surviving; SLA breach keys=[]: هر دو سالم)
 - **Workers:** ingest/pipeline/reverify/jobs/watchdog/soak — همه تازه (<2min)
 - **AI:** صفر ارائه‌دهنده (NOT_CONFIGURED) → DETERMINISTIC؛ محتوای غیرفارسی → HELD (بدون نشت)
 - **Platforms:** Telegram LIVE (@RastehNews؛ 86 SENT mapped)؛ X=BLOCKED_BY_COST_POLICY؛ IG/Threads=AUTH_REQUIRED؛ FB=NOT_CONFIGURED؛ Web=PREVIEW
