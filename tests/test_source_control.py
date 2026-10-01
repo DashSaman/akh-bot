@@ -112,3 +112,15 @@ def test_disabled_source_pending_job_cancelled_at_execution(db):
     assert ok is True and sent["n"] == 0  # cancelled, never sent
     row = PublicationsRepo(db).list()[0]
     assert row["status"] == "SKIPPED" and "SOURCE_DISABLED" in (row["error"] or "")
+
+
+def test_source_display_names_from_event_evidence(db):
+    from app.newsroom.pipeline import source_display_names
+
+    sid = SourcesRepo(db).create(name="tg naya_foriraq", platform="telegram", external_id="n", status="APPROVED")
+    db.execute("INSERT INTO events(title,status,first_seen_at,last_seen_at) VALUES('e','NEW','2030-01-01','2030-01-01')")
+    eid = db.query_one("SELECT last_insert_rowid() i")["i"]
+    db.execute("INSERT INTO raw_items(source_id,platform,external_key,fetched_at,activation_ok) VALUES(?,?,?,?,1)", (sid, "telegram", "k", "2030-01-01"))
+    iid = db.query_one("SELECT last_insert_rowid() i")["i"]
+    db.execute("INSERT INTO event_items(event_id,raw_item_id) VALUES(?,?)", (eid, iid))
+    assert source_display_names(db, eid) == "نایا"

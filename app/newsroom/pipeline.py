@@ -453,8 +453,10 @@ _PUBLIC_NAMES = {
 
 def source_display_names(db, event_id):
     rows = db.query(
-        "SELECT DISTINCT s.name FROM event_items ei JOIN sources s ON s.id=e.id"
-        " JOIN raw_items r ON r.id=ei.raw_item_id WHERE e.id=? AND ei.is_duplicate=0 LIMIT 3", (event_id,))
+        "SELECT DISTINCT s.name FROM event_items ei"
+        " JOIN raw_items r ON r.id=ei.raw_item_id"
+        " JOIN sources s ON s.id=r.source_id"
+        " WHERE ei.event_id=? AND ei.is_duplicate=0 LIMIT 3", (event_id,))
     names = []
     for r in rows:
         n = r["name"]
