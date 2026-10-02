@@ -40,6 +40,6 @@
 | REG-035 | media cache threatens disk | no TTL/cap | INV-020 | cleanup/TTL tests | FIXED+TESTED |
 | REG-036 | new claim → new post instead of edit | edit not wired to merge flow | INV-012 | claim-merge→edit test | **OBSERVED** → Part 3 |
 | REG-037 | burst messages fail to aggregate | no window config | EVENT spec keys | burst-window test | MISSING → Part 3 |
-| REG-038 | same claim paraphrase → multiple stories | line-hash identity only | CLAIM dedup | paraphrase test | OBSERVED → Part 3 |
+| REG-038 | same claim paraphrase → multiple stories | Jaccard-only dedup | INV-014 | tests/test_claim_dedup.py (safe-paraphrase SAME + 14 guards) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — closure P3-H/I) |
 | REG-039 | quote fragment without context | no completeness | GATE-03 | quote-context test | OBSERVED → Part 3 |
 | REG-040 | event identity changes with wording | title-keyed clustering | EVENT_IDENTITY | stable-identity test | OBSERVED → Part 3 |
