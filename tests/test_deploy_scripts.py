@@ -14,11 +14,16 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _run_prepare(app_dir: str) -> str:
-    env = dict(os.environ, AKH_DIR=app_dir)
-    # deploy.sh --prepare-only stops right after the brand guard (no docker needed)
+    # bare 'bash' from python may resolve to WSL bash (drops args, no /c mount).
+    # Use Git Bash explicitly when present; override via TEST_BASH.
+    bash = os.environ.get('TEST_BASH')
+    if not bash:
+        cand = r'C:' + os.sep + os.path.join('Program Files', 'Git', 'usr', 'bin', 'bash.exe')
+        bash = cand if os.path.exists(cand) else 'bash'
     return subprocess.run(
-        ["bash", os.path.join(REPO, "scripts", "deploy.sh"), "--prepare-only"],
-        env=env, capture_output=True, text=True, timeout=30,
+        [bash, 'scripts/deploy.sh', '--prepare-only'],
+        env=dict(os.environ, AKH_DIR=app_dir), capture_output=True, text=True,
+        timeout=30, cwd=str(REPO),
     ).stdout
 
 
