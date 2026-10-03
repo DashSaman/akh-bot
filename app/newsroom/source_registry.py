@@ -93,3 +93,142 @@ def import_registry(db, csv_content: str) -> dict[str, int]:
         imported += 1
         identities += 1
     return {"imported": imported, "unique_identities": identities}
+
+
+# --------------------------------------------------------------------------
+# MASTER-FINAL: full XLSX registry import (one sources ROW PER ENDPOINT,
+# canonical `identity` = authoritative Entity ID). Endpoints of one identity
+# never inflate independent-origin counts (§4); per-endpoint activation is
+# truthful (§17). Idempotent by (identity, platform, url).
+# --------------------------------------------------------------------------
+
+PLATFORM_MAP = {"website": "website", "web": "website", "rss": "rss",
+                "telegram": "telegram", "x": "x", "twitter": "x",
+                "truth social": "x", "threads": "x"}
+
+SPEED_TIERS = {  # XLSX speed metadata → tier + polling seconds (§8)
+    # keyed by the MAX minute bound found in the speed text
+    2: ("FAST", 120), 5: ("MID", 240), 15: ("SLOW", 600),
+}
+
+
+def speed_tier_of(speed_text: str) -> tuple[str, int]:
+    """Map XLSX speed strings ('1–2 min', '5–15 min', 'event-driven') to a
+    tier + polling interval using the range's upper bound; event-driven and
+    long-form tiers poll slowly. Polite defaults otherwise."""
+    t = (speed_text or "").lower()
+    if not t:
+        return ("MID", 300)
+    if "real" in t:
+        return ("FAST", 120)
+    if "event" in t or "daily" in t or "document" in t:
+        return ("EVENT", 1800)
+    nums = [int(n) for n in re.findall(r"\d+", t)]
+    bound = max(nums) if nums else 5
+    for limit, val in sorted(SPEED_TIERS.items()):
+        if bound <= limit:
+            return val
+    return ("SLOW", 900)
+
+
+def role_of(trust_use: str, independent: str, kind: str) -> tuple[str, bool, bool]:
+    """(source_role, verification_allowed, can_increase_independent_count)
+    from XLSX semantics (§6). Priority is speed — NEVER truth."""
+    tu = (trust_use or "").lower()
+    ind = (independent or "").lower()
+    kind_l = (kind or "").lower()
+    if "official" in tu or "institution" in kind_l or "government" in kind_l:
+        return "OFFICIAL_PRIMARY", False, False
+    if "person" in tu or "direct person" in tu or "reporter" in kind_l \
+            or "figure" in tu:
+        return "PERSON_STATEMENT", False, False
+    if "osint" in tu or "osint" in kind_l or "specialist" in tu or "data" in kind_l:
+        # independent OSINT datasets may corroborate (EvidenceLinks, same
+        # event — §24) but never as duplicate stories
+        can = not ind.startswith("no")
+        return "OSINT_DATA", False, can
+    if "analysis" in tu:
+        return "ANALYSIS", False, False
+    # newsroom: independent unless a mirror of another entity's identity
+    mirror = ind.startswith("no") and "same" in ind
+    return "INDEPENDENT_NEWSROOM", (not mirror), (not mirror)
+
+
+def _tg_handle(url: str) -> str:
+    """t.me/<handle> → handle ('' for non-channel links like s/ pages)."""
+    m = re.search(r"t\.me/(?:s/)?([A-Za-z0-9_]{3,64})", url or "")
+    handle = m.group(1) if m else ""
+    return "" if handle.lower() in ("s", "joinchat", "c") else handle
+
+
+def import_full_registry(db, endpoints: list[dict]) -> dict[str, int]:
+    """Import canonical endpoint rows (see scripts/import_source_xlsx.py for
+    the XLSX→canonical conversion). Idempotent; never auto-modifies existing
+    naya/yashar rows; APPROVED+OWNER_ENABLED so the allowlist polls them."""
+    repo = SourcesRepo(db)
+    stats = {"endpoints": 0, "identities": set(), "updated": 0,
+             "created": 0, "blocked": 0}
+    for ep in endpoints:
+        identity = (ep.get("entity") or "").strip()
+        platform = PLATFORM_MAP.get((ep.get("platform") or "").strip().lower(), "website")
+        url = (ep.get("url") or "").strip()
+        if not identity or not url:
+            continue
+        role, va, ciic = role_of(ep.get("trust_use") or "",
+                                 ep.get("independent") or "",
+                                 ep.get("kind") or "")
+        # DB enum is coarse; precise XLSX semantics live in role_detail and
+        # drive the behavioral columns (verification_allowed / can_increase)
+        db_role = {"INDEPENDENT_NEWSROOM": "MAJOR_NEWSROOM",
+                   "OFFICIAL_PRIMARY": "OFFICIAL_PRIMARY",
+                   "PERSON_STATEMENT": "JOURNALIST",
+                   "OSINT_DATA": "AGGREGATOR",
+                   "ANALYSIS": "AGGREGATOR"}[role]
+        tier, interval = speed_tier_of(ep.get("speed") or "")
+        # truthful endpoint activation (§17)
+        if platform in ("x",):  # X / Truth Social: no legitimate free API
+            endpoint_state = "BLOCKED_AUTH"
+        elif platform == "website":  # no generic collector; RSS discovered separately
+            endpoint_state = "UNSUPPORTED"
+        else:
+            endpoint_state = "ACTIVE"
+        lang = (ep.get("language") or "en").strip().lower()[:3]
+        name = (ep.get("name") or identity).strip()[:120]
+        source_type = ("telegram_web_preview" if platform == "telegram"
+                       else ("truthsocial_endpoint" if "truth" in (ep.get("platform") or "").lower()
+                             else ("rss_feed" if platform == "rss" else "website_endpoint")))
+        external_id = _tg_handle(url) if platform == "telegram" else ""
+        # idempotency: same identity+platform+url
+        existing = db.query_one(
+            "SELECT id FROM sources WHERE identity=? AND platform=? AND url=?",
+            (identity, platform, url))
+        if existing:
+            repo.update(int(existing["id"]),
+                        source_role=db_role, role_detail=role,
+                        verification_allowed=va,
+                        can_increase_independent_count=ciic,
+                        polling_interval_seconds=interval, endpoint_state=endpoint_state,
+                        speed_tier=tier, focus=(ep.get("focus") or "")[:300])
+            stats["updated"] += 1
+            stats["identities"].add(identity.lower())
+            continue
+        sid = repo.create(
+            name=name, platform=platform, url=url, external_id=external_id,
+            language=lang, status="APPROVED",
+            source_type=source_type, source_role=db_role,
+            verification_allowed=va, can_increase_independent_count=ciic,
+            priority=50, polling_interval_min=max(1, interval // 60),
+            notes=(f"entity={identity} | {(ep.get('trust_use') or '')[:80]}"
+                   f" | evidence={url}"[:500]))
+        repo.update(sid, identity=identity, endpoint_state=endpoint_state,
+                    speed_tier=tier, role_detail=role,
+                    focus=(ep.get("focus") or "")[:300],
+                    source_control_state="OWNER_ENABLED",
+                    polling_interval_seconds=interval)
+        stats["created"] += 1
+        stats["identities"].add(identity.lower())
+        stats["endpoints"] += 1
+        if endpoint_state != "ACTIVE":
+            stats["blocked"] += 1
+    stats["identities"] = len(stats["identities"])
+    return stats

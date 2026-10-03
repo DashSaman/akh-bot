@@ -150,7 +150,9 @@ def make_send_handler(db: Database, settings: Settings,
             return False
         text = payload.get("text") or ""
         publisher = telegram_publisher_factory()
-        result = await publisher.send_message(text)
+        media_path = str(payload.get("media_path") or "")
+        result = (await publisher.send_media(media_path, caption=text)
+                  if media_path else await publisher.send_message(text))
         pub_id = pubs.upsert(story_id, platform, payload_hash, int(story["version"]))
         db.execute("UPDATE publications SET chat_id=? WHERE id=?", (str(publisher.chat_id), pub_id))
         if result["ok"]:

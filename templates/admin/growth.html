@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block title %}رشد و سئو{% endblock %}
+{% block content %}
+<h1>رشد و سئو (GROWTH-001)</h1>
+<p class="small">تحلیل بدون کوکی و شناسه شخصی — فقط شمارنده‌های تجمیعی.</p>
+
+<h2>بازدید روزانه</h2>
+<table><tr><th>روز</th><th>بازدید</th></tr>
+{% for d in views.daily %}<tr><td>{{ d.day }}</td><td>{{ d.v }}</td></tr>{% else %}<tr><td colspan="2">—</td></tr>{% endfor %}</table>
+
+<h2>پرطرفدارترین صفحه‌ها</h2>
+<table><tr><th>مسیر</th><th>بازدید</th></tr>
+{% for t in views.top_pages %}<tr><td><span dir="ltr">{{ t.path_class }}</span></td><td>{{ t.v }}</td></tr>{% endfor %}</table>
+
+<h2>معرف‌ها و کمپین‌ها</h2>
+<p>{% for r in views.referrers %}<span dir="ltr">{{ r.referrer_host }}={{ r.v }}</span> · {% endfor %}</p>
+<p>{% for u in views.utm %}<span dir="ltr">{{ u.utm }}={{ u.v }}</span> · {% endfor %}</p>
+
+<h2>انتشار بر پایه پلتفرم/منبع</h2>
+<p>{% for p in pubs.by_platform %}<span dir="ltr">{{ p.platform }}={{ p.c }}</span> · {% endfor %}</p>
+<table><tr><th>منبع</th><th>استوری</th></tr>
+{% for s in pubs.by_source %}<tr><td>{{ s.name }} <span dir="ltr">({{ s.identity }})</span></td><td>{{ s.stories }}</td></tr>{% endfor %}</table>
+
+<h2>سلامت سئو</h2>
+<table><tr><th>بررسی</th><th>مقدار</th><th>وضعیت</th></tr>
+{% for c in seo %}<tr><td><span dir="ltr">{{ c.check }}</span></td><td>{{ c.value }}</td><td>{{ '✅' if c.ok else '⚠️' }}</td></tr>{% endfor %}</table>
+{% endblock %}

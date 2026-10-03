@@ -69,7 +69,8 @@ class SourcesRepo:
                    "source_type", "priority", "polling_interval_min", "notes", "enabled",
                    "verification_allowed", "source_role", "can_increase_independent_count",
                    "publication_policy", "priority_rank", "polling_interval_seconds",
-                   "source_control_state", "topic_mode", "selected_topics"}
+                   "source_control_state", "topic_mode", "selected_topics",
+                   "identity", "endpoint_state", "speed_tier", "focus", "role_detail"}
         sets, params = [], []
         for k, v in fields.items():
             if k in allowed:
@@ -526,6 +527,7 @@ class JobsRepo:
 class SettingsRepo:
     def __init__(self, db: Database) -> None:
         self.db = db
+        self._db = db  # fanout platform-registry passthrough
 
     def get(self, key: str, default: str = "") -> str:
         row = self.db.query_one("SELECT value FROM settings WHERE key=?", (key,))

@@ -345,13 +345,51 @@ def _last_sent(db, story_id: int, platform: str = "telegram") -> dict | None:
 
 
 def _enqueue_send(db, settings, story_id: int, text: str, ph: str, pub_id: int,
-                  lifecycle: str) -> None:
+                  lifecycle: str, media: str = "") -> None:
     priority = 100 if lifecycle in ("PROVISIONAL", "CONFIRMED") else 60
     JobsRepo(db).enqueue(
         "publish_send",
         {"story_id": story_id, "platform": "telegram", "payload_hash": ph,
-         "text": text, "publication_id": pub_id},
+         "text": text, "publication_id": pub_id, "media_path": media},
         dedupe_key="send:%s:telegram:%s" % (story_id, ph[:16]), priority=priority)
+
+
+def _attach_event_media(db, event_id: int, story_id: int, headline: str,
+                        lifecycle: str) -> None:
+    """PART-6: register the event's media references as SOURCE_REFERENCE
+    (original bytes need Telethon — BLOCKED until the owner session exists),
+    plus our BRANDED_FALLBACK card so the public post always carries a visual
+    when no original is capturable. Truthful labels only."""
+    import json as _json
+
+    from app.publishing import media as media_mod
+
+    try:
+        items = db.query(
+            "SELECT r.id, r.source_id, r.media_json FROM event_items ei"
+            " JOIN raw_items r ON r.id=ei.raw_item_id"
+            " WHERE ei.event_id=? AND r.media_json NOT IN ('', '[]')", (event_id,))
+        for it in items[:5]:
+            for ref in (_json.loads(it["media_json"] or "[]") or [])[:2]:
+                url = ref.get("url") if isinstance(ref, dict) else str(ref)
+                if url:
+                    media_mod.register_source_reference(
+                        db, url=url, story_id=story_id, event_id=event_id,
+                        raw_item_id=it["id"], source_id=it["source_id"],
+                        caption_ref=headline[:80])
+        icon = {"PROVISIONAL": "🔴", "CONFLICTING": "🟠"}.get(lifecycle, "🟢")
+        media_mod.register_branded_fallback(db, story_id=story_id,
+                                            event_id=event_id,
+                                            headline=headline, icon=icon)
+    except Exception:  # noqa: BLE001 — media must never block publication
+        log.exception("media attach failed event %s", event_id)
+
+
+def _best_media_path(db, story_id: int) -> str:
+    from app.publishing import media as media_mod
+
+    best = media_mod.best_for_story(db, story_id)
+    return (best or {}).get("path", "")
 
 
 def _enqueue_edit(db, settings, story_id: int, text: str, ph: str, pub_id: int,
@@ -473,8 +511,11 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
                  "language": "fa", "topic": "V2"}
         story_id = stories.create(event["id"], content["headline"], content["lead"], draft)
         db.execute("UPDATE stories SET lifecycle=? WHERE id=?", (content["lifecycle"], story_id))
+        _attach_event_media(db, event["id"], story_id, content["headline"],
+                            content["lifecycle"])
         pub_id = PublicationsRepo(db).upsert(story_id, "telegram", ph, 1)
-        _enqueue_send(db, settings, story_id, text, ph, pub_id, content["lifecycle"])
+        _enqueue_send(db, settings, story_id, text, ph, pub_id, content["lifecycle"],
+                      media=_best_media_path(db, story_id))
         EventsRepo(db).set_status(event["id"], "PUBLISHED")
         summary["stories"] += 1
         summary["sends"] += 1

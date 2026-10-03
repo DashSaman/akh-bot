@@ -46,13 +46,17 @@ def record_evidence_link(db: Database, *, claim_id: int, raw_item_id: int,
     return int(row["id"]) if row else None
 
 
-def _collapsed_origin(lineage_key: str, source_name: str, source_id: int) -> str:
-    """One origin per real-world originator: registry identity first (person/
-    institution endpoints), then forward/canonical lineage, then source."""
-    from app.newsroom.source_registry import identity_key
-
+def _collapsed_origin(lineage_key: str, source_name: str, source_id: int,
+                      identity: str = "") -> str:
+    """One origin per real-world originator. Priority: the canonical registry
+    identity (Entity ID — authoritative, one per org/person), then
+    forward/canonical lineage, then registry name identity, then source id."""
+    if identity:
+        return f"identity:{identity.strip().lower()}"
     if lineage_key:
         return f"lineage:{lineage_key}"
+    from app.newsroom.source_registry import identity_key
+
     ident = identity_key(source_name or "")
     if ident:
         return f"identity:{ident}"
@@ -62,10 +66,11 @@ def _collapsed_origin(lineage_key: str, source_name: str, source_id: int) -> str
 def independent_origins(db: Database, claim_id: int) -> list[str]:
     """DISTINCT collapsed origins across a claim's SUPPORTS links."""
     rows = db.query(
-        "SELECT el.lineage_key, el.source_id, s.name FROM evidence_links el"
+        "SELECT el.lineage_key, el.source_id, s.name, s.identity FROM evidence_links el"
         " JOIN sources s ON s.id=el.source_id"
         " WHERE el.claim_id=? AND el.relation=?", (claim_id, SUPPORTS))
-    return sorted({_collapsed_origin(r["lineage_key"] or "", r["name"], r["source_id"])
+    return sorted({_collapsed_origin(r["lineage_key"] or "", r["name"],
+                                     r["source_id"], r["identity"] or "")
                    for r in rows})
 
 
@@ -87,8 +92,9 @@ def is_official_origin(db: Database, claim_id: int) -> bool:
     """OFFICIAL_PRIMARY/PERSON_STATEMENT sources among the claim's evidence —
     authoritative for attribution («X said»), never auto-confirmation."""
     rows = db.query(
-        "SELECT DISTINCT s.source_role FROM evidence_links el"
-        " JOIN sources s ON s.id=el.source_id WHERE el.claim_id=?",
-        (claim_id,))
-    return any(r["source_role"] in ("OFFICIAL_PRIMARY", "PERSON_STATEMENT")
+        "SELECT DISTINCT s.source_role AS role, s.role_detail AS detail"
+        " FROM evidence_links el JOIN sources s ON s.id=el.source_id"
+        " WHERE el.claim_id=?", (claim_id,))
+    return any((r["role"] == "OFFICIAL_PRIMARY")
+               or (r["detail"] in ("OFFICIAL_PRIMARY", "PERSON_STATEMENT"))
                for r in rows)

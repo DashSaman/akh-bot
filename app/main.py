@@ -112,6 +112,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = db
     app.state.provider = provider
 
+    @app.middleware("http")
+    async def _analytics(request, call_next):
+        """GROWTH-001: cookieless aggregate views (public pages only)."""
+        resp = await call_next(request)
+        try:
+            p = request.url.path
+            if (request.method == "GET"
+                    and not p.startswith(("/admin", "/api", "/static", "/login"))
+                    and not p.endswith((".css", ".js", ".ico", ".png", ".jpg", ".xml", ".txt"))):
+                from app.seo import analytics as _an
+                q = request.query_params
+                _an.record_view(
+                    app.state.db, p, referrer=request.headers.get("referer", ""),
+                    utm_source=q.get("utm_source", ""),
+                    utm_medium=q.get("utm_medium", ""),
+                    utm_campaign=q.get("utm_campaign", ""))
+        except Exception:  # noqa: BLE001
+            pass
+        return resp
+
     app.mount("/static", StaticFiles(directory=_pkg_path("static")), name="static")
 
     from app.api.routes import router as api_router

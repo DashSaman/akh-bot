@@ -569,3 +569,141 @@ async def ai_test_provider(request: Request):
     srepo = SettingsRepo(_db(request))
     srepo.set("ai_last_test", f"{message} @ {utcnow()}")
     return RedirectResponse("/admin/ai", status_code=303)
+
+
+# ----------------------------------------------------------------------
+# PART-7: ADMIN-003 manual intake (canonical pipeline only — never direct
+# publish) + ADMIN-004 24/7 health dashboard. No secrets displayed.
+# ----------------------------------------------------------------------
+
+@router.get("/intake", response_class=HTMLResponse)
+async def intake_page(request: Request):
+    if (r := await require_login(request)):
+        return r
+    sources = SourcesRepo(_db(request)).list()
+    return templates.TemplateResponse(request, "admin/intake.html",
+                                      _ctx(request, sources=sources))
+
+
+@router.post("/intake")
+async def intake_submit(request: Request):
+    """Paste text/URL + source + language → RawItem → the SAME canonical V2
+    pipeline (completeness/claims/verification/gates). Manual input is NEVER
+    published directly."""
+    if (r := await require_login(request)):
+        return r
+    form = await request.form()
+    if (rej := _csrf_reject(request, str(form.get("csrf", "")))):
+        return rej
+    db = _db(request)
+    text = str(form.get("text", "")).strip()
+    url = str(form.get("url", "")).strip()
+    source_id = int(form.get("source_id", 0) or 0)
+    language = str(form.get("language", "fa")).strip() or "fa"
+    media_ref = str(form.get("media_ref", "")).strip()
+    if not text:
+        return RedirectResponse("/admin/intake?error=empty", status_code=303)
+    src = SourcesRepo(db).get(source_id) if source_id else None
+    if not src:
+        # manual intake gets its own canonical source identity
+        source_id = SourcesRepo(db).create(
+            name="Manual Intake", platform="website", url=url or "manual://intake",
+            language=language, status="APPROVED",
+            source_type="manual_intake", verification_allowed=False)
+        SourcesRepo(db).update(source_id,
+                               source_control_state="OWNER_ENABLED",
+                               identity="manual-intake",
+                               endpoint_state="ACTIVE")
+    media = [{"url": media_ref}] if media_ref else []
+    import hashlib as _hl
+    from app.db.repo import utcnow as _now
+    RawItemsRepo(db).insert(
+        source_id=source_id, platform="website",
+        external_key="manual:%s:%s" % (
+            _now(), _hl.sha256(text[:80].encode()).hexdigest()[:8]),
+        url=url, canonical_url=url, title=text.split(chr(10))[0][:200],
+        text=text, language=language, activation_ok=True, media=media,
+        lineage_key="manual:intake")
+    SettingsRepo(db).set("manual_intake_last", _now())
+    return RedirectResponse("/admin/intake?ok=1", status_code=303)
+
+
+@router.get("/health", response_class=HTMLResponse)
+async def health_dashboard(request: Request):
+    """ADMIN-004: one truthful 24/7 operations view — workers, queue, sources,
+    watermarks, translation provider, telegram, V2, verification, disk/DB,
+    errors, blocked dependencies. Read-only; no secrets."""
+    if (r := await require_login(request)):
+        return r
+    db = _db(request)
+    import datetime as _dt
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+
+    def _age(key: str) -> str:
+        row = SettingsRepo(db).get(key)
+        try:
+            return f"{round((now - _dt.datetime.fromisoformat(row)).total_seconds())}s"
+        except (TypeError, ValueError):
+            return "—"
+
+    workers = [{"name": k, "age": _age(k)} for k in
+               ("ingest_last_run", "pipeline_last_run", "reverify_last_run",
+                "watchdog_last_run", "soak_last_run")]
+    queue = {r0["status"]: r0["c"] for r0 in db.query(
+        "SELECT status, COUNT(*) AS c FROM jobs GROUP BY status")}
+    src_rows = db.query(
+        "SELECT endpoint_state, COUNT(*) AS c FROM sources WHERE identity!=''"
+        " GROUP BY endpoint_state")
+    endpoints = {r0["endpoint_state"]: r0["c"] for r0 in src_rows}
+    sources = SourcesRepo(db).list()
+    healthy = sum(1 for s in sources if s["enabled"] and not (s["last_error"] or ""))
+    sent = db.query_one(
+        "SELECT COUNT(*) AS n FROM publications WHERE status='SENT'")["n"]
+    dup = db.query_one(
+        "SELECT COUNT(*) AS n FROM publications p1 WHERE p1.status='SENT' AND"
+        " EXISTS (SELECT 1 FROM publications p2 WHERE p2.story_id=p1.story_id"
+        " AND p2.status='SENT' AND p2.remote_id IS NOT NULL"
+        " AND p2.remote_id != p1.remote_id AND p2.chat_id = p1.chat_id)")["n"]
+    runs = db.query_one("SELECT COUNT(*) AS n FROM verification_runs")["n"]
+    held = db.query_one(
+        "SELECT COUNT(*) AS n FROM events WHERE status='HELD'")["n"]
+    orphans = db.query_one(
+        "SELECT COUNT(*) AS n FROM raw_items WHERE processed_state='NEW'"
+        " AND activation_ok=1 AND fetched_at <= datetime('now','-10 minutes')")["n"]
+    from app.publishing.media import disk_percent
+    import os as _os
+
+    settings = request.app.state.settings
+    router = getattr(settings, "_ai_router", None)
+    providers = router.provider_states() if router else []
+    db_bytes = _os.path.getsize(db.path) if hasattr(db, "path") else 0
+    return templates.TemplateResponse(
+        request, "admin/health.html",
+        _ctx(request, workers=workers, queue=queue, endpoints=endpoints,
+             sources_total=len(sources), sources_healthy=healthy,
+             sent=sent, dup_send=dup, vruns=runs, held=held, orphans=orphans,
+             disk=disk_percent(), db_mb=round(db_bytes / 1e6, 1),
+             v2=str(getattr(settings, "event_engine_v2_enabled", False)).lower(),
+             autonomous=str(getattr(settings, "autonomous_mode", False)).lower(),
+             providers=providers,
+             ai_available=getattr(router, "available", False),
+             telegram=("CONFIGURED" if getattr(settings, "telegram_publish_ready", False)
+                       else "NOT_CONFIGURED"),
+             blocked=["TELETHON_LOGIN", "FREE_AI_KEY", "META_OAUTH",
+                      "X_API_PAID", "PUBLIC_DOMAIN"]))
+
+
+@router.get("/growth", response_class=HTMLResponse)
+async def growth_dashboard(request: Request):
+    """PART-10 GROWTH-001: publication/source metrics, search/referral
+    aggregates (cookieless), SEO health. No secrets."""
+    if (r := await require_login(request)):
+        return r
+    from app.seo import analytics as an
+    db = _db(request)
+    return templates.TemplateResponse(
+        request, "admin/growth.html",
+        _ctx(request, views=an.summary(db), pubs=an.publication_metrics(db),
+             seo=an.seo_health(db, getattr(request.app.state.settings,
+                                           "public_base_url", ""))))

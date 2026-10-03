@@ -13,5 +13,19 @@ def distribution_plan(lifecycle: str, settings, settings_repo) -> list[str]:
             platforms.append("website")
         else:
             platforms.append("website_preview")
-        # X / Instagram / Threads / Facebook join here when connected
+        # PART-8 CORE-009: additional platforms join automatically when their
+        # PlatformAccount is enabled AND legitimately authenticated; a
+        # platform failure never blocks the others (independent adapters)
+        try:
+            from app.publishing import platform_accounts as _pa
+            for plat in _pa.active_publish_platforms(getattr(
+                    settings_repo, "db", None) or _db_from(settings_repo)):
+                if plat not in ("telegram", "web", "website") and plat not in platforms:
+                    platforms.append(plat)
+        except Exception:  # noqa: BLE001 — platform registry must never block fanout
+            pass
     return platforms
+
+
+def _db_from(settings_repo):
+    return getattr(settings_repo, "_db", None)

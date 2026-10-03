@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+{% block title %}سلامت ۲۴/۷{% endblock %}
+{% block content %}
+<h1>سلامت عملیات ۲۴/۷</h1>
+<p>V2: <b>{{ v2 }}</b> · AUTONOMOUS: <b>{{ autonomous }}</b> · تلگرام: <b>{{ telegram }}</b> ·
+   دیسک: <b>{{ disk }}%</b> · پایگاه‌داده: <b>{{ db_mb }} MB</b></p>
+
+<h2>کارگرها (سن ضربان)</h2>
+<table>
+  <tr><th>کارگر</th><th>آخرین اجرا</th></tr>
+  {% for w in workers %}<tr><td><span dir="ltr">{{ w.name }}</span></td><td>{{ w.age }}</td></tr>{% endfor %}
+</table>
+
+<h2>صف و انتشار</h2>
+<p>کارها: {% for k, v in queue.items() %}<span dir="ltr">{{ k }}={{ v }}</span> · {% endfor %}</p>
+<p>SENT کل: <b>{{ sent }}</b> · نقض duplicate-SEND: <b>{{ dup_send }}</b> · RawItem یتیم: <b>{{ orphans }}</b></p>
+
+<h2>منابع (راستی صادقانه)</h2>
+<p>مجموع: <b>{{ sources_total }}</b> · سالم: <b>{{ sources_healthy }}</b> · وضعیت اندپوینت‌ها:
+   {% for k, v in endpoints.items() %}<span dir="ltr">{{ k }}={{ v }}</span> · {% endfor %}</p>
+
+<h2>راستی‌آزمایی</h2>
+<p>VerificationRun ها: <b>{{ vruns }}</b> · رویدادهای HELD (دروازه‌های عمدی): <b>{{ held }}</b></p>
+
+<h2>ارائه‌دهنده ترجمه (AI رایگان)</h2>
+<table>
+  <tr><th>ارائه‌دهنده</th><th>پیکربندی</th><th>فعال</th><th>سلامت</th><th>تأخیر</th><th>فراخوانی</th></tr>
+  {% for p in providers %}
+  <tr><td><span dir="ltr">{{ p.name }}</span></td><td>{{ 'بله' if p.configured else 'NOT_CONFIGURED' }}</td>
+      <td>{{ 'بله' if p.enabled else 'خیر' }}</td><td><span dir="ltr">{{ p.health }}</span></td>
+      <td>{{ p.latency_ms }}ms</td><td>{{ p.calls_today }}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>وابستگی‌های مسدود (نیازمند اقدام مالک)</h2>
+<p>{% for b in blocked %}<span dir="ltr">{{ b }}</span> · {% endfor %}</p>
+<p class="small"><a href="/admin/ai">مدیریت ارائه‌دهنده‌ها</a> · <a href="/admin/sources">منابع</a> · <a href="/admin/verification/1">نمونه ردیابی راستی‌آزمایی</a></p>
+{% endblock %}
