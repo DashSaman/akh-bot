@@ -125,7 +125,10 @@ def compare(claim: StructuredClaim, existing: StructuredClaim) -> ClaimDecision:
     min_len = min(len(_tokens(claim.text) - _STOP), len(_tokens(existing.text) - _STOP))
     key_overlap = content_overlap if content_overlap >= max(3, 0.25 * max(1, min_len)) else 0
     comps = {"jaccard": round(jc, 3), "containment": round(ct, 3)}
-    if jc >= 0.55 or ct >= 0.8 or key_overlap >= 3:
+    if (jc >= 0.55 or ct >= 0.8
+            or (key_overlap and jc >= 0.30)):  # shared entities alone ≠ same
+                                              # assertion (jc floors the
+                                              # key-overlap paraphrase path)
         # safe paraphrase: same actor (or both unknown), same certainty class
         if (same_actor or (not claim.actor and not existing.actor)) \
                 and claim.certainty == existing.certainty:
