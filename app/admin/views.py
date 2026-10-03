@@ -491,3 +491,81 @@ async def source_test_view(request: Request, source_id: int):
             result = {"ok": False, "error": str(e)[:200], "mode": "WEB_FALLBACK"}
     return templates.TemplateResponse(request, "admin/source_test.html",
                                       _ctx(request, result=result, src=source))
+
+
+@router.get("/ai", response_class=HTMLResponse)
+async def ai_page(request: Request):
+    """PART-5 ADMIN-002: free-AI provider state — order, configured/enabled,
+    model, health, latency, last success/error, calls. NEVER shows keys."""
+    if (r := await require_login(request)):
+        return r
+    settings = request.app.state.settings
+    router = getattr(settings, "_ai_router", None)
+    states = router.provider_states() if router else []
+    srepo = SettingsRepo(_db(request))
+    return templates.TemplateResponse(
+        request, "admin/ai.html",
+        _ctx(request, states=states,
+             zero_cost=getattr(router, "zero_cost", True),
+             free_only=getattr(router, "free_only", True),
+             available=getattr(router, "available", False),
+             ai_disabled=srepo.get("ai_disabled"),
+             ai_priority=srepo.get("ai_priority")))
+
+
+@router.post("/ai/provider")
+async def ai_provider_action(request: Request):
+    """Actions: enable/disable a provider, or change priority order.
+    Persisted in settings; applied to the LIVE router (no restart needed)."""
+    if (r := await require_login(request)):
+        return r
+    form = await request.form()
+    if (rej := _csrf_reject(request, str(form.get("csrf", "")))):
+        return rej
+    action = str(form.get("action", ""))
+    name = str(form.get("name", ""))
+    db = _db(request)
+    srepo = SettingsRepo(db)
+    router = getattr(request.app.state.settings, "_ai_router", None)
+    if router and name in [st.name for st in router.states]:
+        disabled = {n for n in srepo.get("ai_disabled").split(",") if n}
+        if action == "disable":
+            disabled.add(name)
+        elif action == "enable":
+            disabled.discard(name)
+        elif action == "up":
+            names = [st.name for st in router.states]
+            i = names.index(name)
+            if i > 0:
+                names[i - 1], names[i] = names[i], names[i - 1]
+            srepo.set("ai_priority", ",".join(names))
+        srepo.set("ai_disabled", ",".join(sorted(disabled)))
+        # apply to the live router
+        for st in router.states:
+            if st.name == name and action in ("enable", "disable"):
+                st.enabled = action == "enable" and st.configured
+    return RedirectResponse("/admin/ai", status_code=303)
+
+
+@router.post("/ai/test")
+async def ai_test_provider(request: Request):
+    """One tiny live call against the chosen (or first enabled) provider —
+    health check only; response never contains keys."""
+    if (r := await require_login(request)):
+        return r
+    form = await request.form()
+    if (rej := _csrf_reject(request, str(form.get("csrf", "")))):
+        return rej
+    settings = request.app.state.settings
+    router = getattr(settings, "_ai_router", None)
+    message = "NO_PROVIDER_CONFIGURED"
+    if router and router.available:
+        result = await router.chat_json(
+            system="Reply with JSON only.", user='Return {"ok": true}',
+            max_tokens=20)
+        states = {s["name"]: s for s in router.provider_states()}
+        healthy = [n for n, st in states.items() if st["health"] == "HEALTHY"]
+        message = ("TEST_OK: " + ",".join(healthy)) if result else                   "TEST_FAILED: " + ",".join(f"{n}={states[n]['health']}" for n in healthy)                   if healthy else "TEST_FAILED_ALL"
+    srepo = SettingsRepo(_db(request))
+    srepo.set("ai_last_test", f"{message} @ {utcnow()}")
+    return RedirectResponse("/admin/ai", status_code=303)

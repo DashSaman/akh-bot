@@ -1,0 +1,53 @@
+{% extends "admin/base.html" %}
+{% block title %}هوش مصنوعی رایگان{% endblock %}
+{% block content %}
+<h1>هوش مصنوعی رایگان — ترجمه و راستی‌آزمایی</h1>
+<p>
+  ZERO_COST_MODE: <b>{{ 'ON' if zero_cost else 'OFF' }}</b> ·
+  AI_FREE_ONLY: <b>{{ 'ON' if free_only else 'OFF' }}</b> ·
+  وضعیت روتر: <b>{{ 'فعال' if available else 'بدون ارائه‌دهنده (حالت قطعی — ترجمه HOLD)' }}</b>
+</p>
+{% if ai_last_test %}
+<p class="small">آخرین تست: <span dir="ltr">{{ ai_last_test }}</span></p>
+{% endif %}
+
+<h2>ارائه‌دهنده‌ها (به ترتیب اولویت)</h2>
+<form method="post" action="/admin/ai/test">
+  <input type="hidden" name="csrf" value="{{ csrf_token }}">
+  <button type="submit">تست زنده ارائه‌دهنده فعال</button>
+</form>
+<table>
+  <tr><th>#</th><th>ارائه‌دهنده</th><th>پیکربندی‌شده</th><th>فعال</th><th>مدل</th><th>سلامت</th><th>تأخیر (ms)</th><th>آخرین موفقیت</th><th>آخرین خطا</th><th>فراخوانی‌ها</th><th>عملیات</th></tr>
+  {% for s in states %}
+  <tr>
+    <td>{{ s.priority }}</td>
+    <td><span dir="ltr">{{ s.name }}</span></td>
+    <td>{{ 'بله' if s.configured else 'NOT_CONFIGURED' }}</td>
+    <td>{{ 'بله' if s.enabled else 'خیر' }}</td>
+    <td class="small"><span dir="ltr">{{ s.model }}</span></td>
+    <td><span dir="ltr">{{ s.health }}</span></td>
+    <td>{{ s.latency_ms }}</td>
+    <td class="small"><span dir="ltr">{{ s.last_success or '—' }}</span></td>
+    <td class="small"><span dir="ltr">{{ s.last_error or '—' }}</span></td>
+    <td>{{ s.calls_today }}</td>
+    <td>
+      {% if s.configured %}
+      <form method="post" action="/admin/ai/provider" style="display:inline">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="name" value="{{ s.name }}">
+        {% if s.enabled %}
+        <button name="action" value="disable">غیرفعال</button>
+        {% else %}
+        <button name="action" value="enable">فعال</button>
+        {% endif %}
+        <button name="action" value="up">▲</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="11">هیچ ارائه‌دهنده‌ای در ترتیب پیکربندی نشده است.</td></tr>
+  {% endfor %}
+</table>
+<p class="small">کلیدهای API هرگز نمایش داده نمی‌شوند. اولویت/فعال‌سازی در تنظیمات ذخیره و روی روتر زنده اعمال می‌شود (بدون نیاز به SSH یا ری‌استارت).</p>
+{% endblock %}

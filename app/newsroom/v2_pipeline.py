@@ -40,6 +40,7 @@ from app.newsroom.event_fingerprint import (
 from app.newsroom.materiality import is_material_update
 from app.newsroom.source_context import resolve_context
 from app.newsroom.story_evolution import build_v2_content, render_v2_public_text
+from app.newsroom.translator import needs_translation_for, translate_event_sync
 from app.publishing.telegram_bot import is_persian_public_text
 from app.verification.gates import (
     classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk,
@@ -425,6 +426,24 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
         EventsRepo(db).set_status(event["id"], "HELD")  # CONTENT_QUALITY_HOLD
         log.info("V2 CONTENT_QUALITY_HOLD event %s", event["id"], extra={"event_id": event["id"]})
         return
+
+    # PART-5: foreign evidence → translation path (source language is
+    # AUTHORITATIVE §8). A translated story then passes through the SAME
+    # gates below — verification, importance, attribution, language.
+    foreign_lang = _event_source_language(db, event["id"])
+    evidence = content["headline"] + "\n" + "\n".join(content["details"])
+    if needs_translation_for(foreign_lang, evidence):
+        translated = _translate_event_content(db, settings, event,
+                                              foreign_lang, evidence)
+        if translated is None:
+            EventsRepo(db).set_status(event["id"], "HELD")  # NEEDS_LANGUAGE_PROCESSING
+            log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (lang=%s)",
+                     event["id"], foreign_lang or "heuristic")
+            return
+        content = {"headline": translated["headline"],
+                   "lead": translated.get("lead", ""),
+                   "details": [], "lifecycle": content["lifecycle"],
+                   "translated": True}
     text = render_v2_public_text(content, brand, src_names)
     ph = sha256_hex(text)
 
@@ -439,7 +458,11 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
             EventsRepo(db).set_status(event["id"], "HELD")
             log.info("V2 LOW_PUBLICATION_VALUE event %s (topic=%s)", event["id"], topic)
             return
-        if not is_persian_public_text(text):
+        if not is_persian_public_text(text):  # final gate on FINAL text
+            # (translated content already passed; raw foreign NEVER reaches here)
+            EventsRepo(db).set_status(event["id"], "HELD")
+            log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (final gate)", event["id"])
+            return
             EventsRepo(db).set_status(event["id"], "HELD")  # NEEDS_LANGUAGE_PROCESSING
             log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s", event["id"])
             return
@@ -538,6 +561,32 @@ def process_new_items_v2(db: Database, brand, settings) -> dict:
 
     summary["touched"] = len(summary["touched"])
     return summary
+
+
+def _event_source_language(db, event_id: int) -> str:
+    """Authoritative source language of an event's evidence (§8): the language
+    recorded on its raw items; most frequent non-und wins."""
+    rows = db.query(
+        "SELECT r.language AS lang, COUNT(*) AS c FROM event_items ei"
+        " JOIN raw_items r ON r.id=ei.raw_item_id"
+        " WHERE ei.event_id=? AND r.language NOT IN ('und','') AND r.activation_ok=1"
+        " GROUP BY r.language ORDER BY c DESC LIMIT 1", (event_id,))
+    return rows[0]["lang"] if rows else ""
+
+
+def _translate_event_content(db, settings, event: dict, foreign_lang: str,
+                             evidence: str) -> dict | None:
+    """PART-5: translate event evidence → Persian via the free-AI router with
+    cache + consistency audit. None → HOLD (fail-closed, no raw fallback)."""
+    router = getattr(settings, "_ai_router", None)
+    if router is None or not getattr(router, "available", False):
+        return None
+    try:
+        return translate_event_sync(router, event["title"], evidence,
+                                    db=db, source_language=foreign_lang)
+    except Exception:  # noqa: BLE001 — provider issues never break publishing
+        log.exception("translation bridge failed event %s", event["id"])
+        return None
 
 
 def _scheduled_reverify(db) -> int:

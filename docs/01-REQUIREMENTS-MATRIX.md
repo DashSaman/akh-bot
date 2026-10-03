@@ -32,7 +32,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | VERIFY-004 | 60-min resolution deadline | DONE | _resolve_deadlines | test suite | no stale VERIFYING live | — | 9affb54 | maps to ARCHIVED+note | — |
 | LANG-001 | Persian-only public gate (INV-007/008) | DONE | story_content_language_check content-level | test_language_gate.py | public foreign=0/75 | — | 69059ab | — | — |
 | LANG-002 | Fail-closed at every publisher API | DONE | gates in send/edit/send_media | test_media/test_publisher | live Arabic fixture → 0 API calls | — | 69059ab | — | — |
-| LANG-003 | ar/en/he→fa translation before publish | BLOCKED_EXTERNAL | translator.py + FreeAiRouter | — | foreign→HELD (correct no-leak) | — | 9affb54 | zero provider keys → HOLD forever until key | 5 |
+| LANG-003 | ar/en/he→fa translation before publish | BLOCKED_EXTERNAL | translator.py (v2: forced source-language path, consistency audit, cache, sync bridge) + V2 wiring | tests/test_translation_ai.py (18) | foreign→HELD live (correct no-leak); LIVE translation awaits owner free key | — | PART5 | zero provider keys configured — external blocker | 5 |
 | EDIT-001 | Meaningful headline gate | DONE | is_valid_headline + speaker parse | test_dedup/gates | 0 bad headlines live | — | 69059ab | — | — |
 | EDIT-002 | Body quality gate (no dup/fragment) | DONE | body_quality_gate compact mode | test suite | sweeps show clean | — | 69059ab | — | — |
 | EDIT-003 | Icon-only lifecycle, no «✅ تأیید شد» | DONE | STATUS_ICONS | test_language_gate | channel clean | EDITORIAL-STYLE | 69059ab | — | — |
@@ -54,12 +54,12 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | PLATFORM-002 | X/IG/Threads/FB adapters | BLOCKED_EXTERNAL | fanout.py placeholders | mock only | AUTH_REQUIRED/BLOCKED_BY_COST_POLICY truthful | — | 9affb54 | owner OAuth/keys | 8 |
 | PLATFORM-003 | Platform control panel | DONE | platforms.py + template | test_media page tests | /admin/platforms live | — | 69059ab | — | — |
 | ADMIN-001 | Private dual-auth admin domain | DONE | deploy/apache vhost + htpasswd | — | rasteh.softarg.ir 401 anon | MIGRATION.md | 69059ab | — | — |
-| ADMIN-002 | AI admin page | MISSING | — | — | — | — | 9affb54 | Part 7 | 7 |
+| ADMIN-002 | AI admin page | DONE | admin/views.py /admin/ai (+provider actions) + templates/admin/ai.html | tests/test_translation_ai.py (3: page/login-gate/toggle-persist) | /admin/ai live (provider order/state/health/latency/actions; keys never shown) | AI-USE-POLICY | PART5 | zero keys → providers NOT_CONFIGURED shown truthfully | 5 |
 | ADMIN-003 | Manual news intake (web+inbox) | MISSING | — | — | — | — | 9affb54 | Part 7 | 7 |
 | ADMIN-004 | Health/24-7 dashboard page | PARTIAL | doctor.sh + heartbeats in DB | — | doctor exit 0 | — | 9affb54 | full admin page missing | 7 |
-| AI-001 | Optional, zero-cost router | PARTIAL | integrations/llm/router.py | — | 0 providers → deterministic | AI-USE-POLICY | 9affb54 | no keys configured | 5 |
-| AI-002 | Provider failover A→B→C→det | PARTIAL | router loop | — | untested live (no keys) | — | 9affb54 | BLOCKED for live-proof | 5 |
-| AI-003 | Factual consistency audit of AI output | PARTIAL | translator.consistent_with_source | unit only | — | — | 9affb54 | — | 5 |
+| AI-001 | Optional, zero-cost router | DONE | integrations/llm/router.py (config-resolved providers, per-provider state, ZERO_COST/AI_FREE_ONLY, key redaction) | tests/test_translation_ai.py | 0 keys → NOT_CONFIGURED states exposed on /admin/ai; deterministic newsroom unaffected | AI-USE-POLICY | PART5 | live call awaits owner key | 5 |
+| AI-002 | Provider failover A→B→C→det | PARTIAL | router failover loop (A-fail→B, 429→RATE_LIMITED, all-fail→None/HOLD) | tests/test_translation_ai.py (failover, all-fail, rate-limit) | unit+mock proven; LIVE proof awaits owner key | — | PART5 | BLOCKED_EXTERNAL for live proof (no key) | 5 |
+| AI-003 | Factual consistency audit of AI output | DONE | translator.consistency_issues (NUMBERS_INVENTED/NEGATION_REVERSED incl ar/he/CERTAINTY_ESCALATED/FOREIGN_OUTPUT) | tests/test_translation_ai.py (numbers/negation/uncertainty rejects) | reject → HOLD live in V2 path | — | PART5 | — | 5 |
 | AUT-001 | 24/7 in-container workers, no agent | DONE | lifespan 6 tasks + restart unless-stopped | restart tests | soak metrics jsonl | AUTONOMY | 69059ab | — | — |
 | AUT-002 | Watchdog + orphan + SLA markers | DONE | watchdog_loop | test suite | hb fresh, orphan=0 | — | 69059ab | — | — |
 | WATCH-001 | Soak 24h metrics service-collected | DONE | soak_and_cleanup_loop | — | soak-metrics.jsonl growing | — | 69059ab | — | — |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 46 · PARTIAL 8 · BROKEN 0 · MISSING 4 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 49 · PARTIAL 6 · BROKEN 0 · MISSING 3 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)

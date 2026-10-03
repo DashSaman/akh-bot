@@ -33,7 +33,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     from app.integrations.llm.router import FreeAiRouter
 
-    settings._ai_router = FreeAiRouter()
+    # PART-5: provider enable/disable + priority persist in settings (DB);
+    # construction resolves everything once from the environment snapshot.
+    from app.db.repo import SettingsRepo as _SR
+
+    _ai_state = _SR(db)
+    _disabled = {n.split(":", 1)[1] for n in (_ai_state.get("ai_disabled") or "").split(",") if n}
+    _order = [n for n in (_ai_state.get("ai_priority") or "").split(",") if n] or None
+    settings._ai_router = FreeAiRouter(disabled=_disabled, priority_order=_order)
     provider: LLMProvider | None = None
     if settings.llm_ready:
         provider = GlmProvider(
