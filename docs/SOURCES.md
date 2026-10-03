@@ -21,3 +21,11 @@
   only (`activation_ok=0`) and never auto-publish eligible.
 - RSS uses ETag/If-Modified-Since (304 = skip, zero cost).
 - `health_score` is a reliability signal, not truth: decays on errors, recovers on success.
+
+## MASTER-FINAL: رجیستری کامل مالک (XLSX) — ۱۱۰ اندپوینت / ۷۸ هویت
+- منبع: `rasteh_external_sources_iran_2026.xlsx` مالک → تبدیل برنامه‌ای: `scripts/import_source_xlsx.py` → `import_full_registry()`
+- هویت canonical = ستون Entity ID (authoritative): اندپوینت‌های یک سازمان/شخص هرگز خاستگاه مستقل را متورم نمی‌کنند (تست‌شده §24)
+- نقش‌ها (§6): Independent newsroom / Official primary / Direct person / Mirror / OSINT data / Analysis — در `role_detail` + ستون‌های رفتاری
+- سطح سرعت (§8): FAST 120s / MID 240s / SLOW 600s / EVENT 1800s + jitter داخلی scheduler
+- فعال‌سازی صادقانه (§17): ACTIVE 58 (تلگرام web + RSS مستقیم + فید عمومی Google News برای نیوزروم‌های bot-protected — اندپوینت عمومی رسمی، بدون دور زدن هیچ paywall/robots) · BLOCKED_AUTH 27 (X/TruthSocial) · UNSUPPORTED 25 (اسناد رسمی/OSINT/افراد بدون فید عمومی)
+- کشف فید: `scripts/discover_feeds.py` (فقط `<link rel=alternate>` عمومی) · فعال‌سازی مرحله‌ای: `scripts/activate_endpoints.py`

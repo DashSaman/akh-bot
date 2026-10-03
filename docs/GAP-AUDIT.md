@@ -1,16 +1,7 @@
-# GAP-AUDIT (from Matrix @PART-3-D / 2d2851f)
+# GAP-AUDIT (final @MASTER-FINAL)
 
-## Critical BROKEN — none at matcher level; EVENT-001 PARTIAL + EVENT-003 PARTIAL (both behind V2 flag)
-EVENT-001 → PARTIAL (multi-signal matcher tested; live closure P3-H/I)
-EVENT-003 → PARTIAL (source_context.py + burst.py + migration 012 tested; dormant behind V2=false until P3-E wiring; NOT_LIVE_YET)
+## Status: MISSING=0 · BROKEN=0 · PARTIAL=1 (MEDIA-003 — original bytes need Telethon session) · BLOCKED_EXTERNAL=4
+LANG-003 + AI-002 (free AI key) · INGEST-003 (Telethon session) · PLATFORM-002 (Meta OAuth / X cost policy)
 
-## PARTIAL (see Matrix) → Parts 1(légacy)/3(E/F/G/H/I)/4/6/7/9
-CORE-001 leftovers, CLAIM-001 (paraphrase=P3-C), EVENT-002 (edit wiring=P3-E), SRC-003, MEDIA-003, PUB-003 floor, ADMIN-004, AI-001/002/003 (key), PORT-002 drill, REG-028/029 (P3-E wiring)
-
-## MISSING (3) → CORE-009 (P8), ADMIN-003 (P7), GROWTH-001 (P10)
-(P5 closed ADMIN-002 → DONE; LANG-003 stays BLOCKED_EXTERNAL on the missing free key)
-(P4 closed CORE-007/008 → DONE with live evidence; REG-041 watermark fix added)
-(P3-C closed the CLAIM-003 dedup gap; P3-D closed the EVENT-003 windows gap — both PARTIAL behind V2=false)
-
-## BLOCKED_EXTERNAL (3)
-INGEST-003 (Telethon session) · LANG-003 (AI key) · PLATFORM-002 (OAuth/cost)
+## Every BLOCKED_EXTERNAL has: working code + tests + owner action (docs/OWNER-ACTION-REQUIRED.md) + safe fallback
+- LANG-003: foreign → HELD (zero leak) | INGEST-003: WEB_FALLBACK active | PLATFORM-002: Telegram/Web unaffected
