@@ -75,15 +75,21 @@ def label_of(text: str) -> str:
 
 
 def extract_explicit_speaker(text: str) -> str | None:
-    """Explicit speaker of a COMPLETE item: first-line colon label, else
-    leading NP before a said-verb. None = no explicit speaker (a candidate
-    for contextless-quote inheritance, REG-039)."""
+    """Explicit speaker of a COMPLETE item: first-line colon label, a leading
+    «ترامپ: …» label with content, else a leading NP before a said-verb.
+    None = no explicit speaker (a candidate for contextless-quote
+    inheritance, REG-039)."""
     t = (text or "").strip()
     if not t:
         return None
     first = t.split("\n", 1)[0].strip()
     if first.endswith(":") or first.endswith("："):
         return first.rstrip(":：").strip() or None
+    from app.newsroom.claim_model import _LEADING_LABEL_RE, _is_identity_label
+
+    m = _LEADING_LABEL_RE.match(t)
+    if m and _is_identity_label(m.group(1)):
+        return m.group(1).strip()
     m = _SPOKEN_RE.match(normalize(t))
     return m.group(1).strip() if m else None
 

@@ -231,9 +231,11 @@ def test_replay_idempotent_single_context_row(db):
 # ---- deterministic speaker extraction unit checks ----
 
 def test_extract_explicit_speaker_forms():
-    # mid-text label is only explicit via a said-verb
-    assert extract_explicit_speaker("نتانیاهو: جنگ ادامه دارد") is None
+    # leading «label:» form IS an explicit speaker (P3-E interview turns)
+    assert extract_explicit_speaker("نتانیاهو: جنگ ادامه دارد") == "نتانیاهو"
     assert extract_explicit_speaker("نتانیاهو گفت جنگ ادامه دارد") == "نتانیاهو"
+    # connective turns are not speakers
+    assert extract_explicit_speaker("در ادامه افزود: مذاکرات ادامه دارد") is None
     assert extract_explicit_speaker("هیچ توافقی حاصل نشده است") is None
     assert extract_explicit_speaker(PREFIX) == "ترامپ به مجله تایم"
 

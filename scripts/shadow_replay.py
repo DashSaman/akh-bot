@@ -115,7 +115,7 @@ def main() -> int:
     edit_jobs = sh.query("SELECT * FROM jobs WHERE job_type='publish_edit'")
 
     from app.newsroom.claim_compare import compare
-    from app.newsroom.claim_model import ClaimClass, StructuredClaim
+    from app.newsroom.v2_pipeline import _claim_row_to_structured
     from app.publishing.telegram_bot import is_persian_public_text, story_content_language_check
     from app.verification.gates import is_valid_headline
 
@@ -135,7 +135,8 @@ def main() -> int:
     if bad_head:
         failures.append(f"I3 invalid/fragment headlines in stories: {bad_head}")
 
-    # I4 — paraphrase duplicates across events
+    # I4 — paraphrase duplicates across events (real structured fields, not
+    # bare texts: actor/certainty differences are real differences)
     dup_pairs = []
     top = {}
     for c in claims:
@@ -145,11 +146,9 @@ def main() -> int:
         for e2 in eids[i + 1:]:
             for c1 in top[e1][:3]:
                 for c2 in top[e2][:3]:
-                    a = StructuredClaim(claim_class=ClaimClass.GENERAL, text=c1["text"],
-                                        source_item_id=0)
-                    b = StructuredClaim(claim_class=ClaimClass.GENERAL, text=c2["text"],
-                                        source_item_id=0)
-                    if compare(a, b).decision == "SAME_CLAIM":
+                    d = compare(_claim_row_to_structured(c1),
+                                _claim_row_to_structured(c2))
+                    if d.decision == "SAME_CLAIM":
                         dup_pairs.append((e1, e2, c1["id"], c2["id"]))
     if dup_pairs:
         failures.append(f"I4 paraphrase duplicate events: {dup_pairs[:5]}")

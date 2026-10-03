@@ -162,6 +162,22 @@ def is_prefix_fragment(text: str) -> bool:
         "عاجل", "فوری", "breaking", "خبر فوری", "در همین حال", "جزئیات بیشتر"}
 
 
+# speaker labels that carry no identity («فوری:», «عاجل:») — never an actor
+_EMPTY_LABELS = {"عاجل", "فوری", "breaking", "خبر فوری", "مهم", "هشدار", "ویژه"}
+
+
+def _is_identity_label(label: str) -> bool:
+    """A label is an identity ONLY when it is neither an empty marker nor a
+    connective phrase («در ادامه افزود:» is a verb turn, not a speaker)."""
+    lb = (label or "").strip().lower()
+    if not lb or lb in _EMPTY_LABELS:
+        return False
+    return not any(lb.startswith(c.rstrip(":：").lower()) for c in _CONNECTIVE_STARTS)
+
+_LEADING_LABEL_RE = re.compile(
+    r"^([\u0600-\u06FF\w][\u0600-\u06FF\w .'\-]{1,38}?)\s*[:：]\s*(.*)$", re.S)
+
+
 def extract_structured(text: str, source_item_id: int,
                        speaker_hint: str | None = None) -> StructuredClaim:
     """Deterministic extractor: populates structured fields from text without
@@ -173,6 +189,14 @@ def extract_structured(text: str, source_item_id: int,
         first, rest = body.split("\n", 1)
         speaker = first.strip().rstrip(":：").strip()
         body = rest.strip()
+    else:
+        # leading «ترامپ: …» label WITH content on the first line — the label
+        # is the explicit speaker; the content is the claim text
+        m = _LEADING_LABEL_RE.match(body)
+        if m and _is_identity_label(m.group(1)) \
+                and (m.group(2).strip() or "\n" in body):
+            speaker = m.group(1).strip()
+            body = m.group(2).strip()
     cls = detect_class(body)
     nums = numbers_of(body)
     time_ref = None
