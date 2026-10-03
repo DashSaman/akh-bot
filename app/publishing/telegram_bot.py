@@ -119,6 +119,57 @@ def build_public_text(status, body, brand, source_mode="hidden",
     return (chr(10) + chr(10)).join(parts)
 
 
+# URGENT-FIX §5 — generic status/warning-only public bodies (deadline-era
+# regression): a public post whose stripped body is just this warning carries
+# no actual claim context and must never go out alone
+_GENERIC_STATUS_MARKERS = (
+    "بررسی این موضوع در منابع در دسترس",
+    "تا این لحظه به تأیید مستقل نرسیده است",
+    "پایش ادامه دارد و در صورت تأیید",
+)
+
+
+def public_body_is_substantive(text: str) -> bool:
+    """FINAL PUBLIC BODY GATE (fail-closed, SEND + EDIT): strip lifecycle
+    icon, topic emoji, source line, brand footer, @handle and bold markers —
+    a meaningful standalone Persian factual claim must remain. Rejects:
+    empty body, source-only, footer-only, speaker-prefix-only, and
+    generic-status-only bodies (owner screenshot regression)."""
+    t = (text or "").strip()
+    if not t:
+        return False
+    # strip markup/footer/source lines (mirror of build_public_text assembly)
+    for line in list(_SOURCE_LINE_RE.finditer(t)):
+        pass
+    lines = []
+    for ln in t.split(chr(10)):
+        stripped = ln.strip()
+        if _SOURCE_LINE_RE.match(stripped):          # منبع: ...
+            continue
+        if "راسته؟ |" in stripped or stripped.startswith("🆔 @"):
+            continue                                  # footer lines
+        if stripped.startswith(("🟢", "🔴", "🟠", "⚠️", "❌")):
+            stripped = stripped.lstrip("🟢🔴🟠⚠️❌ ").strip()
+        stripped = stripped.replace("*", "")
+        if stripped:
+            lines.append(stripped)
+    body = chr(10).join(lines).strip()
+    if not body:
+        return False
+    # generic status-only body (deadline regression): marker + no other claim
+    non_generic = [ln for ln in lines
+                   if not any(m in ln for m in _GENERIC_STATUS_MARKERS)]
+    if not non_generic:
+        return False
+    # speaker-prefix-only («ترامپ:» alone) / too few meaningful Persian words
+    words = [w for w in body.split() if len(w) > 1]
+    persian_words = [w for w in words if any("؀" <= ch <= "ۿ" for ch in w)]
+    if len(persian_words) < 4:
+        return False
+    from app.verification.gates import is_valid_headline
+    return is_valid_headline(lines[0][:140]) or len(persian_words) >= 6
+
+
 def to_telegram_html(text: str) -> str:
     """Convert our **bold** markers to <b>, escape everything else (no raw ** ever)."""
     import html as _h

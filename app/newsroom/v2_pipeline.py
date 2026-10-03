@@ -465,10 +465,23 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
         log.info("V2 CONTENT_QUALITY_HOLD event %s", event["id"], extra={"event_id": event["id"]})
         return
 
-    # PART-5: foreign evidence → translation path (source language is
-    # AUTHORITATIVE §8). A translated story then passes through the SAME
-    # gates below — verification, importance, attribution, language.
-    foreign_lang = _event_source_language(db, event["id"])
+    # URGENT-FIX (publication liveness): Persian claims WIN. A mixed-language
+    # event (NAYA-ar + Yashar-fa on the same happening) must publish from its
+    # PERSIAN claims; foreign claims remain traceable evidence and never
+    # block a publishable Persian story. Translation applies ONLY when the
+    # event has no usable Persian claim at all.
+    if not is_persian_public_text(content["headline"] + " " + " ".join(content["details"])):
+        persian_claims = [dict(c) for c in claims
+                          if is_persian_public_text((c.get("text") or ""))]
+        if persian_claims:
+            persian_content = build_v2_content(
+                event, persian_claims,
+                max_details=int(getattr(settings, "max_public_story_details", 5)))
+            if persian_content is not None:
+                content = persian_content  # Persian story; foreign text never publishes
+    foreign_lang = ""
+    if not is_persian_public_text(content["headline"] + " " + " ".join(content["details"])):
+        foreign_lang = _event_source_language(db, event["id"])
     evidence = content["headline"] + "\n" + "\n".join(content["details"])
     if needs_translation_for(foreign_lang, evidence):
         translated = _translate_event_content(db, settings, event,

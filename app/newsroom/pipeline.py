@@ -446,41 +446,75 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
 
 
 def _resolve_deadlines(db: Database, settings: Any, brand: Brand) -> int:
-    """60-minute rule: a public story must not stay generic VERIFYING/PROVISIONAL."""
+    """60-minute rule (URGENT-FIX semantics):
+
+    A) SENT provisional story → EDIT the SAME Telegram message: keep the
+       original headline/details/attribution and APPEND a compact caution.
+       Never replace real news with a generic warning-only body.
+    B) never-published unresolved story → archive internally, public SEND = 0
+       (no placeholder posts).
+    C) deadline updates use the publish_edit job type (never legacy generic).
+    D) a deadline never creates a second Telegram post for an existing story.
+    """
     deadline_min = getattr(settings, "verifying_deadline_minutes", 60)
     cutoff = (datetime.now(timezone.utc) - timedelta(minutes=deadline_min)).isoformat(timespec="seconds")
     fixed = 0
-    from app.publishing.telegram_bot import build_public_text, is_persian_public_text
-    from app.publishing import fanout as _fo
     repo = StoriesRepo(db)
     for st in db.query(
             "SELECT * FROM stories WHERE lifecycle IN ('VERIFYING','PROVISIONAL') AND created_at<=?", (cutoff,)):
-        text = build_public_text(
-            "UNVERIFIED_EXPIRED",
-            "بررسی این موضوع در منابع در دسترس، تا این لحظه به تأیید مستقل نرسیده است. "
-            "پایش ادامه دارد و در صورت تأیید، همین پست به‌روزرسانی می‌شود.",
-            brand, "hidden", True)
-        draft = {"headline": st["headline"], "lead": st["lead"],
-                 "platform_variants": {"telegram": text}, "generation_mode": "DETERMINISTIC"}
-        repo.set_lifecycle(st["id"], "ARCHIVED", "unverified_expired: 60-minute resolution deadline", draft)
-        # PART-4: traceable DEADLINE VerificationRun (event-level, idempotent)
+        story_id = int(st["id"])
+        # A vs B: was this story already publicly sent?
+        sent = db.query_one(
+            "SELECT * FROM publications WHERE story_id=? AND platform='telegram'"
+            " AND status='SENT' AND remote_id IS NOT NULL ORDER BY id DESC LIMIT 1",
+            (story_id,))
+        if sent and sent.get("remote_id"):
+            import json as _json
+
+            draft = _json.loads(st["draft_json"] or "{}")
+            base = (draft.get("platform_variants") or {}).get("telegram") or ""
+            if not base:
+                from app.newsroom.story_evolution import render_v2_public_text
+                base = render_v2_public_text(
+                    {"headline": st["headline"], "details": [],
+                     "lifecycle": "PROVISIONAL"}, brand,
+                    (draft.get("source_names") or ""))
+            # strip the old footer, append caution, re-append exact footer
+            from app.publishing.telegram_bot import (
+                brand_signature, sanitize_public_copy,
+            )
+            sig = brand_signature(brand, True)
+            body = base.replace(sig, "").rstrip()
+            body = body + chr(10) + chr(10) + "⚠️ این ادعا تا این لحظه به تأیید مستقل نرسیده است."
+            text = (body + chr(10) + chr(10) + sig).strip() if sig else body
+            ph = sha256_hex(text)
+            version = int(st["version"]) + 1
+            repo.set_lifecycle(story_id, "ARCHIVED",
+                               "unverified_expired: deadline caution edit (original preserved)",
+                               {**draft, "platform_variants": {"telegram": text}})
+            pub_id = PublicationsRepo(db).upsert(story_id, "telegram", ph, version)
+            JobsRepo(db).enqueue(
+                "publish_edit",
+                {"story_id": story_id, "platform": "telegram", "payload_hash": ph,
+                 "text": text, "publication_id": pub_id},
+                priority=90,
+                dedupe_key="deadline-edit:%s:%s" % (story_id, ph[:16]))
+        else:
+            # B) never published → internal resolution only; NO public post
+            repo.set_lifecycle(story_id, "ARCHIVED",
+                               "unverified_expired: resolved internally (never published)", None)
         try:
             from app.verification import runs as vr
             vr.record_run(
                 db, event_id=int(st["event_id"]), claim_id=None, trigger=vr.DEADLINE,
                 result="UNVERIFIED_EXPIRED",
-                reason_codes=["DEADLINE_60MIN", "RESOLVED_ARCHIVED"],
-                dedupe_key="deadline:%s" % int(st["id"]))
+                reason_codes=["DEADLINE_60MIN",
+                              "CAUTION_EDIT" if (sent and sent.get("remote_id")) else "INTERNAL_ARCHIVE"],
+                dedupe_key="deadline:%s" % story_id)
             db.execute("UPDATE events SET last_verified_at=? WHERE id=?",
                        (utcnow(), int(st["event_id"])))
         except Exception:  # noqa: BLE001 — traceability never blocks resolution
             pass
-        ph = sha256_hex(text)
-        pid = PublicationsRepo(db).upsert(st["id"], "telegram", ph, repo.get(st["id"])["version"])
-        JobsRepo(db).enqueue("publish_telegram",
-                             {"story_id": st["id"], "platform": "telegram", "payload_hash": ph,
-                              "text": text, "publication_id": pid},
-                             dedupe_key="pub:tg:%s:%s" % (st["id"], ph[:16]), priority=100)
         fixed += 1
     if fixed:
         log.info("deadline resolution applied to %s stories", fixed)

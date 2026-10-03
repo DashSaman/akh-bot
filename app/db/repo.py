@@ -513,6 +513,13 @@ class JobsRepo:
         )
         return "retry"
 
+    def reschedule(self, job_id: int, run_after: datetime) -> None:
+        """URGENT-FIX: rate-cap throttle — reschedule WITHOUT consuming a
+        failure retry (no attempts increment, stays pending)."""
+        self.db.execute(
+            "UPDATE jobs SET status='pending', run_after=?, updated_at=? WHERE id=?",
+            (run_after.isoformat(timespec="seconds"), utcnow(), job_id))
+
     def requeue_running(self) -> int:
         """Crash recovery: jobs stuck in 'running' after restart go back to pending."""
         cur = self.db.execute(

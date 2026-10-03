@@ -17,6 +17,16 @@ log = logging.getLogger("akh.jobs")
 Handler = Callable[[dict[str, Any]], Awaitable[bool]]
 
 
+class Throttled(Exception):
+    """Rate-cap reached: the job must be RESCHEDULED to the next eligible
+    time without consuming a failure retry (URGENT-FIX §3)."""
+
+    def __init__(self, retry_in_seconds: float = 120.0):
+        super().__init__(f"rate cap; retry in {retry_in_seconds:.0f}s")
+        self.retry_in_seconds = retry_in_seconds
+
+
+
 class JobRunner:
     def __init__(self, db: Database, settings: Settings) -> None:
         self.db = db
@@ -35,7 +45,16 @@ class JobRunner:
                 payload = json.loads(job["payload_json"] or "{}")
                 if handler is None:
                     raise RuntimeError(f"no handler for {job['job_type']}")
-                ok = await handler(payload)
+                try:
+                    ok = await handler(payload)
+                except Throttled as th:
+                    from datetime import timedelta as _td
+                    self.jobs.reschedule(
+                        job["id"],
+                        datetime.now(timezone.utc) + _td(seconds=th.retry_in_seconds))
+                    log.info("job %s THROTTLED (rate cap) — rescheduled", job["id"],
+                             extra={"job_id": job["id"]})
+                    continue
                 outcome = self.jobs.finish(job["id"], bool(ok), None if ok else "handler reported failure")
             except Exception as e:  # noqa: BLE001 — job errors are data, not crashes
                 log.warning("job %s failed: %s", job["id"], e, extra={"job_id": job["id"]})
@@ -142,13 +161,36 @@ def make_send_handler(db: Database, settings: Settings,
                if lifecycle == "PROVISIONAL"
                else getattr(settings, "max_confirmed_posts_per_hour", 12))
         now = datetime.now(timezone.utc)
-        if pubs.sent_since(now - timedelta(hours=1)) >= cap:
-            return False
-        if pubs.sent_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
-            return False
-        if pubs.sent_since(now - timedelta(hours=24)) >= settings.max_posts_per_day:
-            return False
+        # URGENT-FIX §3: a rate-capped publication is THROTTLED — rescheduled
+        # to the next eligible window; it NEVER consumes failure retries and
+        # NEVER becomes permanently FAILED merely because of the cap.
+        sent_1h = pubs.sent_since(now - timedelta(hours=1))
+        sent_24h = pubs.sent_since(now - timedelta(hours=24))
+        if sent_1h >= min(cap, getattr(settings, "max_posts_per_hour", 12))                 or sent_24h >= getattr(settings, "max_posts_per_day", 120):
+            # next eligible: when the oldest SENT-in-window ages out
+            oldest = db.query_one(
+                "SELECT MIN(updated_at) AS t FROM publications WHERE status='SENT'"
+                " AND updated_at>=?", ((now - timedelta(hours=24)).isoformat(timespec="seconds"),))
+            retry_in = 300.0
+            if sent_24h >= getattr(settings, "max_posts_per_day", 120):
+                retry_in = 3600.0
+            elif oldest and oldest.get("t"):
+                try:
+                    from datetime import datetime as _dt
+                    t0 = _dt.fromisoformat(str(oldest["t"]).replace("Z", "+00:00"))
+                    retry_in = max(60.0, min(3600.0, (now - t0).total_seconds()))
+                except ValueError:
+                    pass
+            raise Throttled(retry_in)
         text = payload.get("text") or ""
+        # URGENT-FIX §5: fail-closed final body gate (screenshot regression)
+        from app.publishing.telegram_bot import public_body_is_substantive
+        if text and not public_body_is_substantive(text):
+            pubs.mark(pubs.upsert(story_id, platform, payload_hash,
+                                  int(story["version"])),
+                      "SKIPPED", error="BLOCKED_BODY_GATE")
+            log.warning("publish_send blocked: non-substantive body (story %s)", story_id)
+            return True
         publisher = telegram_publisher_factory()
         media_path = str(payload.get("media_path") or "")
         result = (await publisher.send_media(media_path, caption=text)
@@ -188,6 +230,14 @@ def make_edit_handler(db: Database, settings: Settings,
                                   int(stories.get(story_id)["version"])),
                       "SKIPPED", error="NO_SENT_TARGET_TO_EDIT")
             log.warning("publish_edit skipped: no SENT target (story %s)", story_id)
+            return True
+        etext = payload.get("text") or ""
+        from app.publishing.telegram_bot import public_body_is_substantive
+        if etext and not public_body_is_substantive(etext):
+            pubs.mark(pubs.upsert(story_id, platform, payload_hash,
+                                  int(stories.get(story_id)["version"])),
+                      "SKIPPED", error="BLOCKED_BODY_GATE")
+            log.warning("publish_edit blocked: non-substantive body (story %s)", story_id)
             return True
         publisher = telegram_publisher_factory()
         result = await publisher.edit_message(prior["remote_id"], payload.get("text") or "")

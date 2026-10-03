@@ -70,6 +70,13 @@ class Scheduler:
                 if orphans:
                     _SR(self.db).set("orphan_backlog", str(orphans))
                     log.warning("watchdog: %s orphan eligible items", orphans)
+                # URGENT-FIX §10: PUBLICATION_PIPELINE_STALLED — eligible PERSIAN
+                # items + publishable stories, yet zero SENT in 30 min. Never
+                # fires when only foreign/HELD items arrived (fa filter).
+                try:
+                    _publication_stall_check(self.db)
+                except Exception:  # noqa: BLE001
+                    log.exception("stall check failed")
             except Exception:  # noqa: BLE001
                 log.exception("watchdog pass failed; continuing")
             await _a.sleep(120)
@@ -159,3 +166,76 @@ class Scheduler:
             except Exception:  # noqa: BLE001
                 log.exception("pipeline loop crashed; continuing")
             await asyncio.sleep(self.settings.pipeline_interval_seconds)
+
+
+def _publication_stall_check(db) -> None:
+    """30-min liveness guard (URGENT-FIX §10). Persian-only eligibility so
+    foreign/HELD traffic never triggers a false alarm."""
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+
+    from app.publishing.telegram_bot import is_persian_public_text
+
+    now = _dt.now(_tz.utc)
+    win = (now - _td(minutes=30)).isoformat(timespec="seconds")
+    # fa eligible items in window (python-side: fetched_at mixes formats)
+    items = db.query(
+        "SELECT text, activation_ok, language, processed_state, fetched_at"
+        " FROM raw_items WHERE fetched_at >= ?", (win,))
+    fa_eligible = 0
+    for r in items:
+        if not r["activation_ok"] or not (r["language"] or "").startswith("fa"):
+            continue
+        if r["processed_state"] == "NEW":
+            fa_eligible += 1
+        elif is_persian_public_text((r["text"] or "")[:500]):
+            fa_eligible += 1
+    if not fa_eligible:
+        _SR_marker_clear(db)
+        return
+    # python-side window (created_at mixes ISO-T and space formats)
+    stories_ready = 0
+    for r0 in db.query("SELECT created_at FROM stories WHERE status='DRAFT'"):
+        try:
+            t0 = _dt.fromisoformat(str(r0["created_at"]).replace(" ", "T").replace("Z", "+00:00"))
+            if t0.tzinfo is None:
+                t0 = t0.replace(tzinfo=_tz.utc)
+            if t0 >= now - _td(minutes=30):
+                stories_ready += 1
+        except ValueError:
+            continue
+    pending_jobs = db.query_one(
+        "SELECT COUNT(*) c FROM jobs WHERE job_type IN ('publish_send','publish_edit')"
+        " AND status IN ('pending','running')")["c"]
+    failed_jobs = db.query_one(
+        "SELECT COUNT(*) c FROM jobs WHERE job_type IN ('publish_send','publish_edit')"
+        " AND status='failed'")["c"]
+    sent_delta = 0
+    for p in db.query("SELECT updated_at FROM publications WHERE status='SENT'"):
+        try:
+            if _dt.fromisoformat(str(p["updated_at"]).replace("Z", "+00:00")) >= now - _td(minutes=30):
+                sent_delta += 1
+        except ValueError:
+            continue
+    if stories_ready <= 0 and pending_jobs <= 0:
+        _SR_marker_clear(db)
+        return
+    if sent_delta > 0:
+        _SR_marker_clear(db)
+        return
+    # stalled: eligible fa items + ready stories/jobs + zero SENT
+    holds = {r["verification"]: r["c"] for r in db.query(
+        "SELECT verification, COUNT(*) c FROM events WHERE status='HELD' GROUP BY verification")}
+    diag = {
+        "eligible_items": fa_eligible, "stories_ready": stories_ready,
+        "pending_jobs": pending_jobs, "failed_jobs": failed_jobs,
+        "sent_delta_30m": sent_delta, "top_hold_reasons": holds,
+    }
+    import json as _json
+    from app.db.repo import SettingsRepo as _S
+    _S(db).set("PUBLICATION_PIPELINE_STALLED", _json.dumps(diag, ensure_ascii=False))
+    log.warning("PUBLICATION_PIPELINE_STALLED: %s", diag)
+
+
+def _SR_marker_clear(db) -> None:
+    from app.db.repo import SettingsRepo as _S
+    _S(db).set("PUBLICATION_PIPELINE_STALLED", "")
