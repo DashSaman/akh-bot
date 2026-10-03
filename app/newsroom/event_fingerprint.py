@@ -284,12 +284,13 @@ def decide(fp: EventFingerprint, candidates: list[tuple[int, EventFingerprint]],
         if not hard_conflicts(fp, cand, fp_ts):
             runner_up = score(fp, cand, fp_ts)
             break
-    if runner_up and abs(best_total - sum(
-            0.30 * runner_up["actors"] + 0.25 * runner_up["predicate"]
-            + 0.15 * runner_up["location"] + 0.15 * runner_up["event_type"]
-            + 0.10 * runner_up["temporal"], 0.0)) <= AMBIGUOUS_BAND and best_total < ATTACH_THRESHOLD:
-        return MatchDecision("AMBIGUOUS_EVENT", candidate_event_id=best_id,
-                             matched=matched, score_components=best_comps,
-                             reason_codes=["SCORE_IN_AMBIGUOUS_BAND"])
+    if runner_up and best_total < ATTACH_THRESHOLD:
+        runner_total = (0.30 * runner_up["actors"] + 0.25 * runner_up["predicate"]
+                        + 0.15 * runner_up["location"] + 0.15 * runner_up["event_type"]
+                        + 0.10 * runner_up["temporal"])
+        if abs(best_total - runner_total) <= AMBIGUOUS_BAND:
+            return MatchDecision("AMBIGUOUS_EVENT", candidate_event_id=best_id,
+                                 matched=matched, score_components=best_comps,
+                                 reason_codes=["SCORE_IN_AMBIGUOUS_BAND"])
     return MatchDecision("CREATE_NEW", reason_codes=["BELOW_ATTACH_THRESHOLD"],
                          score_components=best_comps)
