@@ -98,7 +98,14 @@ def main() -> int:
         standard_max_age_minutes = 180
 
     summary1 = process_new_items_v2(sh, _B(), _S())
-    summary2 = process_new_items_v2(sh, _B(), _S())  # replay idempotency
+    # drain: the pipeline processes ≤100 items per pass by design, so run
+    # passes until nothing new is processed
+    last = summary1
+    for _ in range(20):
+        if last["processed"] == 0:
+            break
+        last = process_new_items_v2(sh, _B(), _S())
+    summary2 = process_new_items_v2(sh, _B(), _S())  # true replay: must be a no-op
 
     # ---------------- collect evidence ----------------
     events = sh.query("SELECT * FROM events")

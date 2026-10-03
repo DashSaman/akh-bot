@@ -105,28 +105,33 @@ def _candidate_events(db, item_time: str) -> list[dict]:
 
 
 def _find_same_claim_event(db, claim, occurred: str) -> int | None:
-    """REG-038 cross-event guard: bounded scan of recent claims; a new item
-    whose claim is the SAME_CLAIM — or a near-identical paraphrase (high
-    lexical overlap) — of an existing one joins that claim's event and never
-    creates a duplicate one."""
+    """REG-038 cross-event guard: a new item whose claim is the SAME_CLAIM —
+    or a near-identical paraphrase — of an existing one joins that claim's
+    event and never creates a duplicate one. Exact structural fingerprints
+    match regardless of age (cheap equality); lexical near-dups are bounded."""
     from app.newsroom.claim_compare import _STOP, _jaccard, _tokens, compare
 
     def _content_toks(t: str) -> set:
         return _tokens(t) - _STOP
 
-    cutoff = _iso_plus(occurred, -_MAX_CONTINUATION_MIN * 60)
-    # id-bounded recency scan (format-safe: created_at formats differ across
-    # writers — datetime('now') vs ISO-T — so we never string-compare them)
+    if claim.fingerprint:
+        row = db.query_one(
+            "SELECT c.*, c.event_id AS eid FROM claims c WHERE c.fingerprint=?"
+            " ORDER BY c.id DESC LIMIT 1", (claim.fingerprint,))
+        if row:
+            return int(row["eid"])
+    item_toks = _content_toks(claim.text)
+    if not item_toks:
+        return None
     rows = db.query(
         "SELECT c.*, c.event_id AS eid FROM claims c JOIN events e ON e.id=c.event_id"
-        " ORDER BY c.id DESC LIMIT 20")
-    item_toks = _content_toks(claim.text)
+        " ORDER BY c.id DESC LIMIT 40")
     for row in rows:
         ex = _claim_row_to_structured(row)
         decision = compare(claim, ex).decision
         if decision == "SAME_CLAIM":
             return int(row["eid"])
-        if decision == "AMBIGUOUS_CLAIM" and item_toks \
+        if decision == "AMBIGUOUS_CLAIM" \
                 and _jaccard(item_toks, _content_toks(row["text"])) >= 0.6:
             return int(row["eid"])
     return None
