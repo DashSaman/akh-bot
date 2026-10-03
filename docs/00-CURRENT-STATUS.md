@@ -1,44 +1,35 @@
-# 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-03 15:34Z, PART 3 COMPLETE)
+# 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-03 16:48Z, PART 4 COMPLETE)
 
-- **Repository HEAD:** ebb0589 + docs commit (docs may run ahead of runtime — valid)
-- **Production runtime SHA:** ebb0589 (verified in-container AKHBOT_GIT_SHA)
-- **PART:** 1 = PASS · PART 2 = BLOCKED_EXTERNAL · **PART 3 = PASS — V2 ENGINE LIVE**
-- **EVENT_ENGINE_V2_ENABLED:** **true** (since 2026-10-03T14:58Z; kill-switch = flip to false + restart)
+- **Repository HEAD:** 8d5389f + docs commit (docs may run ahead — valid)
+- **Production runtime SHA:** **8d5389f** (verified in-container; V2 engine live)
+- **PART:** 1 = PASS · PART 2 = BLOCKED_EXTERNAL · PART 3 = PASS (V2 LIVE) · **PART 4 = PASS — verification lifecycle LIVE**
+- **EVENT_ENGINE_V2_ENABLED:** true (cutover 2026-10-03T14:58Z)
 
-## Runtime snapshot @2026-10-03 15:34Z (read-only queries)
-- SENT: **204** (baseline at V2 cutover 202; +2 V2 posts, 0 duplicates)
-- Stories 1142 · Events 1379 · Claims 2257 · RawItems 1783 · HELD events 233 (gates intentional)
-- Jobs: publish_send done=2 · publish_edit=0 (awaits first natural material update) · duplicate-SEND violations=0
-- schema_version: **13** (012 context/burst + 013 materiality)
+## Runtime snapshot @16:48Z (read-only queries)
+- SENT: **208** (V2 cutover baseline 202; duplicate-SEND violations **0**)
+- Stories 1143 · Events 1382 · Claims 2261 · RawItems 1789
+- **evidence_links: 2** (SUPPORTS + live CONTRADICTS) · **verification_runs: 356** — NEW_EVIDENCE 1 · SCHEDULED_REVERIFY 351 · DEADLINE 3 · **CONTRADICTION 1 (live)**
+- Live contradiction case: ev 1377 / claim 2261 («شن الطيران… 60 غارة») → CONFLICTING + CONTRADICTS link + traced run; NO fabricated resolution
+- Claims with next_verify_at / verification_attempts: 2 (bookkeeping live)
+- schema_version: **14** (014 evidence_links + verification_runs + claim verify columns)
 
-## V2 live evidence (first 36 minutes)
-- Post 1 (story 1141/ev 1378): flydubai/Tehran — 🔴 Persian full headline + «منبع: یاشار» + exact brand footer, remote_id 376
-- Post 2 (story 1142/ev 1379): Hormuz tankers — distinct real event (over-merge 0)
-- Arabic NAYA items → HELD NEEDS_LANGUAGE_PROCESSING (0 foreign published; no translator by design)
-- LOW_PUBLICATION_VALUE holds observed (ENTERTAINMENT) — importance floor live
-- Context rows 0 / burst 3+3 — burst grouping live; solo-prefix messages held no context yet (natural traffic)
+## PART-4 deliverables (live)
+- **CORE-007 EvidenceLink**: SUPPORTS/CONTRADICTS/CONTEXT, provenance preserved (raw_item/source/lineage refs only — no RawItem duplication); UNIQUE(claim,item,relation) idempotent
+- **CORE-008 VerificationRun**: triggers NEW_EVIDENCE/SCHEDULED_REVERIFY/CONTRADICTION/DEADLINE/MANUAL (all deterministic, 0 AI); dedupe_key = one run per scheduled attempt; next_verify_at maintained
+- Independent origins = COLLAPSED origins: forward/repost lineage + registry identity (CENTCOM EN+AR=1, Trump X+TS=1); OFFICIAL origins authoritative for attribution only
+- High-risk single-origin stays SINGLE_SOURCE (never CONFIRMED) — regression-tested + live
+- Admin trace view live: /admin/verification/{event_id} (claims, supporting/contradicting evidence, origins, schedule, run history — auth-gated, no secrets)
 
-## Shadow gate (before activation) — PASS on live 24h replay
-- 218 items → 127 events → 50 stories → 50 send intents (1/story) · dup SEND 0 · incomplete 0 · paraphrase dup 0 (policy-aware I4) · foreign 0 · replay idempotent
-- Shadow-driven fixes: decide() crash on real data, I7 drain semantics, identity-label extraction («ترامپ: …»), Stage-C overlap ratio floor + jc≥0.30
+## INGEST-002 hardening (found during Part-4 live acceptance)
+- **REG-041 FIXED**: telegram_web watermark advanced past unpersisted messages (burst > 20/pass would permanently skip) → persist-then-advance + oldest-first pending-above-watermark + regression test (25-msg burst → 25 stored)
+- Live audit: checkpoint-gap ids proved to be **id-holes (deleted posts), NOT lost data** — one-shot backfill found zero missing public posts
+- Watermarks re-synced to checkpoint and re-advanced by the fixed collector
 
-## Sources / collectors
-- Allowlist ON: 1=naya_foriraq 2=withyashar (OWNER_ENABLED, health 1.0) · others OWNER_DISABLED
-- Telegram=WEB_FALLBACK (TELETHON_AUTH_REQUIRED) · checkpoints advancing
+## V2 live behavior (carryover, unchanged)
+- Persian posts with exact brand footer + «منبع: …» attribution; Arabic → HELD (no translator); fragments/low-value → HELD; EDIT-only invariant enforced (0 duplicate sends)
 
-## Workers / platform / admin / AI
-- Heartbeats fresh (ingest/pipeline/reverify/watchdog) · V2 pipeline log lines confirm live path
-- Platforms: Telegram LIVE (@RastehNews) · X=BLOCKED_BY_COST_POLICY · IG/Threads=AUTH_REQUIRED · Web=PREVIEW
-- AI: 0 providers → DETERMINISTIC (V2 needs no AI) · Arabic held until owner configures translation
-
-## Host isolation @V2 cutover
-- Only akhbot-app restarted · other containers untouched · Apache untouched · no daemon restart/prune/reboot
-- Rollback path: EVENT_ENGINE_V2_ENABLED=false + redeploy (RawItems preserved — engine is read-then-append)
-
-## Known follow-ups (not Part-3 blockers)
-- First natural publish_edit pending (material update on a SENT story) — unit+shadow proven, runner guard live
-- Headline truncation at 140 chars can cut mid-word (cosmetic)
-- PUB-003 importance audit script (P3-F §27) not built; floor itself live
+## Host isolation @8d5389f deploy
+- Only akhbot-app replaced · other containers untouched · Apache/network/firewall untouched · no daemon restart/prune/reboot · backups before each migration (latest akhbot-20261003T160452Z.db)
 
 ## Blockers (external)
 - Telethon session · free-AI key · Meta OAuth · public domain

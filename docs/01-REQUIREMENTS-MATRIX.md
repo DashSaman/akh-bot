@@ -7,8 +7,8 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | CORE-004 | StoryVersion model | DONE | set_lifecycle + story_versions | tests/test_canonical_story.py version-bump+provenance | sv=1036 intact post-migration | DATA-MODEL.md | afcc60f | — | 1 |
 | CORE-005 | Publication outbox/ledger model: job→ledger row→remote mapping; no re-publication on new RawItem | DONE | publications UNIQUE + jobs table + handler edit-path | test_publisher idempotency+edit | 86 SENT mapped; retry=0 dup | PUBLISHING.md | 69059ab | — | — |
 | CORE-006 | Canonical MediaAsset structural entity/state model (incl. truthful status labels) | PARTIAL | media_cache table | test_media (asset) | media rows | DATA-MODEL.md | 9affb54 | status labels missing (REG-025) | 6 |
-| CORE-007 | EvidenceLink entity and canonical evidence relations | MISSING | — | — | — | DATA-MODEL.md | 97e98e2 | — | 4 |
-| CORE-008 | VerificationRun entity and traceable verification history | MISSING | — | — | — | DATA-MODEL.md | 97e98e2 | — | 4 |
+| CORE-007 | EvidenceLink entity and canonical evidence relations | DONE | verification/evidence.py (SUPPORTS/CONTRADICTS/CONTEXT, lineage+identity collapse, no RawItem duplication) + migration 014 | tests/test_verification_lifecycle.py (15) | LIVE: links recording (live CONTRADICTION case ev1377/claim2261 with CONTRADICTS link) | DATA-MODEL.md | 8d5389f | — | 4 |
+| CORE-008 | VerificationRun entity and traceable verification history | DONE | verification/runs.py (5 triggers, dedupe_key, next_verify_at, claim bookkeeping) + v2_pipeline wiring + 60-min DEADLINE | tests/test_verification_lifecycle.py | LIVE: 356+ runs (NEW_EVIDENCE/SCHEDULED_REVERIFY/DEADLINE/CONTRADICTION all observed) | VERIFICATION.md | 8d5389f | — | 4 |
 | CORE-009 | PlatformAccount entity and platform credential/account state model | MISSING | — | — | — | DATA-MODEL.md | 97e98e2 | — | 8 |
 | CORE-002 | No RawItem→publisher direct path | DONE | canonical enqueues: pipeline._render_public + admin lifecycle build_public_text; runner executes payload.text only; sealed scripts outside app/ | tests/test_publication_paths.py (5 AST/contract guards; re-verified @1fd0200) | no non-canonical path reachable (inventory in test docstring) | — | 1fd0200 | — | 1 |
 | CORE-003 | Public output only from canonical Story | DONE | _create_and_enqueue/_publish_deterministic | tests/test_canonical_story.py | blob-headlines=0 live | — | afcc60f | — | 1 |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 44 · PARTIAL 8 · BROKEN 0 · MISSING 6 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 46 · PARTIAL 8 · BROKEN 0 · MISSING 4 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)

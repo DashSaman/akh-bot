@@ -43,3 +43,4 @@
 | REG-038 | same claim paraphrase → multiple stories | Jaccard-only dedup | INV-014 | tests/test_claim_dedup.py + cross-event fp-exact guard + shadow | FIXED+LIVE (shadow 24h paraphrase dup 0) |
 | REG-039 | quote fragment without context | no completeness | GATE-03 | tests/test_source_context.py (12) | FIXED+LIVE (per-source TTL context in V2 path) |
 | REG-040 | event identity changes with wording | title-keyed clustering | EVENT_IDENTITY | stable-identity tests + live distinct-event sample | FIXED+LIVE |
+| REG-041 | watermark advances past unpersisted messages (burst > insert-limit permanently skipped) | fetch-then-advance order bug (telegram_web) | INGEST-002 persist-then-advance | tests/test_telegram_web.py burst fixture (25 msgs → 25 stored, wm=max persisted) | FIXED+TESTED live @8d5389f; audit of live gap ids proved NO data lost (id-holes = deleted posts) |
