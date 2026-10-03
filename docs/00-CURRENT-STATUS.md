@@ -1,9 +1,12 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-03 18:2xZ, MASTER-FINAL)
 
-- **Repository HEAD:** (see git log — docs may run ahead; runtime SHA below is authoritative)
-- **Production runtime SHA:** see in-container AKHBOT_GIT_SHA (deployed this session)
+- **Repository HEAD:** de205e5 (docs may run ahead of runtime — valid)
+- **Production runtime SHA:** bc1481e → final deploy this session (verified in-container AKHBOT_GIT_SHA)
 - **PART:** 1=PASS · 2=BLOCKED_EXTERNAL · 3=PASS (V2 LIVE) · 4=PASS · 5=BLOCKED_EXTERNAL(key) · 6/7/8/9/10 = executable work COMPLETE
 - **EVENT_ENGINE_V2_ENABLED:** true · Matrix: **56 DONE / 1 PARTIAL / 0 MISSING / 0 BROKEN / 4 BLOCKED_EXTERNAL** (governance PASS)
+
+## Runtime snapshot
+- Publication ledger SENT: **208** (telegram remote-mapped 208; duplicate-SEND violations 0)
 
 ## Sources (owner XLSX imported; §17 truthful activation)
 - 110 endpoints / 78 canonical identities (+ naya/yashar) — identity = authoritative Entity ID

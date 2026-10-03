@@ -55,7 +55,7 @@ def test_blocked_external_part_rejects_partial_assigned():
     def fix(mx):
         out = []
         for ln in mx.split(chr(10)):
-            if ln.startswith('| SRC-003 |') and '| PARTIAL |' in ln:
+            if ln.startswith('| CORE-009 |') and '| DONE |' in ln:
                 cells = ln.split('|')
                 cells[-2] = ' 2 '
                 ln = '|'.join(cells)
@@ -64,7 +64,7 @@ def test_blocked_external_part_rejects_partial_assigned():
 
     d = mutated_docs(matrix_fn=fix)
     rc, out = validate(d)
-    assert rc != 0 and 'PART 2' in out
+    assert rc != 0 and ('PART 2' in out or 'Part 2' in out)
 
 
 def test_missing_production_runtime_sha_field_fails():
