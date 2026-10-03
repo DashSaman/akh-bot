@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     disk_critical_percent: int = 85
     max_source_video_mb: int = 50
     event_engine_v2_enabled: bool = False  # P3 kill switch — default OFF
+    # P3-D — per-source context + burst aggregation (wired by P3-E; V2 stays off)
+    source_context_ttl_seconds: int = 1800   # SOURCE_CONTEXT_TTL_SECONDS
+    event_burst_window_seconds: int = 180    # EVENT_BURST_WINDOW_SECONDS
     ingest_interval_seconds: int = 300
     pipeline_interval_seconds: int = 60
     jobs_interval_seconds: int = 10
