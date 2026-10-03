@@ -233,12 +233,20 @@ def register_source_reference(db, *, url: str, story_id: int | None,
 
 
 def register_branded_fallback(db, *, story_id: int, event_id: int | None,
-                              headline: str, icon: str = "🟢") -> int | None:
+                              headline: str, icon: str = "🟢",
+                              lifecycle: str = "") -> int | None:
     """Our own branded card — explicitly BRANDED_FALLBACK, never presented as
-    source media (REG-025)."""
+    source media (REG-025). Renders via cards.render_card_v2 (proper Persian
+    shaping); any renderer failure → NO card (text-only), never a broken image."""
     import hashlib as _h
 
-    card = branded_card(headline, icon=icon)
+    from app.publishing.cards import render_card_v2
+    if not lifecycle:
+        lifecycle = {"🔴": "PROVISIONAL", "🟠": "CONFLICTING"}.get(icon, "VERIFIED")
+    try:
+        card = render_card_v2(headline, lifecycle=lifecycle)
+    except Exception:  # noqa: BLE001 — broken card must never reach the channel
+        return None
     sha = _h.sha256(open(card, "rb").read()).hexdigest() if card else ""
     return register_asset(db, story_id=story_id, event_id=event_id,
                           raw_item_id=None, source_id=0, kind="card",

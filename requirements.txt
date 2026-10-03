@@ -9,3 +9,5 @@ pyyaml>=6.0
 python-multipart>=0.0.9
 telethon>=1.36
 pillow>=10.3
+arabic-reshaper>=3.0
+python-bidi>=0.4
