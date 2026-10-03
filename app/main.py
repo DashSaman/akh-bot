@@ -47,7 +47,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.workers_enabled:
             import asyncio
 
-            from app.jobs.runner import JobRunner, make_publish_handler
+            from app.jobs.runner import (
+                JobRunner, make_edit_handler, make_publish_handler, make_send_handler,
+            )
             from app.newsroom.pipeline import process_new_items
             from app.ingestion.scheduler import Scheduler
             from app.publishing.telegram_bot import TelegramBotPublisher
@@ -64,6 +66,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     ),
                 ),
             )
+            # P3-E: distinct job types — publish_send NEVER fires when a SENT
+            # publication exists; publish_edit NEVER sends (edits same message).
+            runner.register("publish_send", make_send_handler(
+                db, settings,
+                lambda: TelegramBotPublisher(
+                    settings.telegram_bot_token, settings.telegram_publish_target),
+            ))
+            runner.register("publish_edit", make_edit_handler(
+                db, settings,
+                lambda: TelegramBotPublisher(
+                    settings.telegram_bot_token, settings.telegram_publish_target),
+            ))
             loop = asyncio.get_running_loop()
             tasks = [
                 loop.create_task(scheduler.ingest_loop(), name="ingest"),

@@ -84,3 +84,32 @@ def test_rawitem_cannot_reach_publisher_object():
     """Import contract: RawItemsRepo is never imported by the publisher module."""
     tb = (ROOT / "app/publishing/telegram_bot.py").read_text(encoding="utf-8")
     assert "RawItemsRepo" not in tb and "raw_items" not in tb
+
+
+def test_publish_send_edit_job_type_separation():
+    """§21 architectural guard (P3-E): publish_send and publish_edit are
+    DISTINCT handlers. publish_send must hard-refuse when a SENT publication
+    exists (SEND_FORBIDDEN_EDIT_ONLY); publish_edit must NEVER call
+    send_message — a first publication is publish_send's job alone."""
+    import ast as _ast
+
+    src = (ROOT / "app/jobs/runner.py").read_text(encoding="utf-8")
+    assert "SEND_FORBIDDEN_EDIT_ONLY" in src
+    assert "NO_SENT_TARGET_TO_EDIT" in src
+
+    tree = _ast.parse(src)
+    funcs = {n.name: n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    for fn in ("make_send_handler", "make_edit_handler"):
+        assert fn in funcs, f"missing handler factory {fn}"
+
+    def _inner_calls(fn_node, name):
+        inner = [n for n in _ast.walk(fn_node)
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and n.name == "handler"][0]
+        return [n.func.attr for n in _ast.walk(inner)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)]
+
+    send_calls = _inner_calls(funcs["make_send_handler"], "handler")
+    assert "send_message" in send_calls and "edit_message" not in send_calls
+    edit_calls = _inner_calls(funcs["make_edit_handler"], "handler")
+    assert "send_message" not in edit_calls and "edit_message" in edit_calls

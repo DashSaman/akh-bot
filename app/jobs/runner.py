@@ -57,6 +57,151 @@ def lifecycle_now(story) -> str:
     return (story.get("lifecycle") if isinstance(story, dict) else None) or "CONFIRMED"
 
 
+def _policy_blocked(db: Database, settings: Settings, story_id: int,
+                    platform: str, payload_hash: str, pubs, stories) -> str | None:
+    """Execution-time checks shared by all publish handlers: story existence,
+    pause, and the CURRENT source allowlist / publication policy. Returns a
+    skip reason or None. An old queued job must never bypass current policy."""
+    story = stories.get(story_id)
+    if not story:
+        return "NO_STORY"
+    app_settings = SettingsRepo(db)
+    if app_settings.is_paused(platform):
+        return "PAUSED"
+    ev = db.query_one("SELECT * FROM events WHERE id=?", (story["event_id"],))
+    if ev:
+        origin = db.query(
+            "SELECT DISTINCT s.enabled en, s.source_control_state scs,"
+            " s.publication_policy pp FROM event_items ei"
+            " JOIN raw_items r ON r.id=ei.raw_item_id"
+            " JOIN sources s ON s.id=r.source_id"
+            " WHERE ei.event_id=? AND ei.is_duplicate=0", (story["event_id"],))
+        if origin and not any(o["en"] and o["scs"] == "OWNER_ENABLED" and o["pp"] == "AUTO" for o in origin):
+            pubs.mark(pubs.upsert(story_id, platform, payload_hash, int(story["version"])),
+                      "SKIPPED", error="CANCELLED_SOURCE_DISABLED")
+            return "CANCELLED_SOURCE_DISABLED"
+    return None
+
+
+def _sent_in_current_chat(db, settings, story_id: int, platform: str) -> dict | None:
+    current_chat = getattr(settings, "telegram_publish_target", "") if platform == "telegram" else ""
+    prior = db.query_one(
+        "SELECT * FROM publications WHERE story_id=? AND platform=? AND status='SENT' "
+        "ORDER BY id DESC LIMIT 1", (story_id, platform))
+    if prior and prior.get("remote_id") and (
+            not current_chat or not prior.get("chat_id") or prior["chat_id"] == str(current_chat)):
+        return prior
+    return None
+
+
+def make_send_handler(db: Database, settings: Settings,
+                      telegram_publisher_factory: Callable[[], Any]) -> Handler:
+    """P3-E publish_send: FIRST publication of a story. HARD INVARIANT (§21):
+    an existing SENT publication for (story, platform) makes SEND forbidden —
+    updates must go through publish_edit. Fail-closed, ledger-guarded."""
+    pubs = PublicationsRepo(db)
+    stories = StoriesRepo(db)
+
+    async def handler(payload: dict[str, Any]) -> bool:
+        story_id = int(payload["story_id"])
+        platform = str(payload["platform"])
+        payload_hash = str(payload["payload_hash"])
+        blocked = _policy_blocked(db, settings, story_id, platform, payload_hash, pubs, stories)
+        if blocked == "NO_STORY":
+            return True
+        if blocked:
+            return True
+        story = stories.get(story_id)
+        if pubs.already_sent(story_id, platform, payload_hash):
+            return True
+        # THE invariant: never SEND a second post for an already-published story
+        if _sent_in_current_chat(db, settings, story_id, platform) is not None:
+            pubs.mark(pubs.upsert(story_id, platform, payload_hash, int(story["version"])),
+                      "SKIPPED", error="SEND_FORBIDDEN_EDIT_ONLY")
+            log.warning("publish_send forbidden (SENT exists) story %s", story_id)
+            return True
+        # FRESHNESS GATE: stale backlog must not flood the channel later.
+        ev = db.query_one("SELECT * FROM events WHERE id=?", (story["event_id"],))
+        if ev:
+            from datetime import timezone as _tz
+            age_min = None
+            for stamp in (ev["last_seen_at"], story["created_at"]):
+                try:
+                    dt = datetime.fromisoformat(stamp)
+                    age_min = (datetime.now(_tz.utc) - dt).total_seconds() / 60
+                    break
+                except (TypeError, ValueError):
+                    continue
+            max_age = float(getattr(settings, "standard_max_age_minutes", 180))
+            if age_min is not None and age_min > max_age and lifecycle_now(story) in ("CONFIRMED",):
+                pubs.mark(pubs.upsert(story_id, platform, payload_hash, int(story["version"])),
+                          "SKIPPED", error="STALE_SUPERSEDED")
+                return True
+        lifecycle = story.get("lifecycle") or "CONFIRMED"
+        cap = (getattr(settings, "max_provisional_posts_per_hour", 6)
+               if lifecycle == "PROVISIONAL"
+               else getattr(settings, "max_confirmed_posts_per_hour", 12))
+        now = datetime.now(timezone.utc)
+        if pubs.sent_since(now - timedelta(hours=1)) >= cap:
+            return False
+        if pubs.sent_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
+            return False
+        if pubs.sent_since(now - timedelta(hours=24)) >= settings.max_posts_per_day:
+            return False
+        text = payload.get("text") or ""
+        publisher = telegram_publisher_factory()
+        result = await publisher.send_message(text)
+        pub_id = pubs.upsert(story_id, platform, payload_hash, int(story["version"]))
+        db.execute("UPDATE publications SET chat_id=? WHERE id=?", (str(publisher.chat_id), pub_id))
+        if result["ok"]:
+            pubs.mark(pub_id, "SENT", remote_id=str(result.get("message_id", "")))
+            stories.mark_published(story_id)
+            return True
+        pubs.mark(pub_id, "FAILED", error=result.get("error"))
+        return False
+
+    return handler
+
+
+def make_edit_handler(db: Database, settings: Settings,
+                      telegram_publisher_factory: Callable[[], Any]) -> Handler:
+    """P3-E publish_edit: updates an ALREADY-SENT story by editing the SAME
+    Telegram message. NEVER sends: no SENT target ⇒ skip (a first publication
+    is publish_send's job). Fail-closed language gate inside the publisher."""
+    pubs = PublicationsRepo(db)
+    stories = StoriesRepo(db)
+
+    async def handler(payload: dict[str, Any]) -> bool:
+        story_id = int(payload["story_id"])
+        platform = str(payload["platform"])
+        payload_hash = str(payload["payload_hash"])
+        blocked = _policy_blocked(db, settings, story_id, platform, payload_hash, pubs, stories)
+        if blocked == "NO_STORY":
+            return True
+        if blocked:
+            return True
+        prior = _sent_in_current_chat(db, settings, story_id, platform)
+        if prior is None:
+            pubs.mark(pubs.upsert(story_id, platform, payload_hash,
+                                  int(stories.get(story_id)["version"])),
+                      "SKIPPED", error="NO_SENT_TARGET_TO_EDIT")
+            log.warning("publish_edit skipped: no SENT target (story %s)", story_id)
+            return True
+        publisher = telegram_publisher_factory()
+        result = await publisher.edit_message(prior["remote_id"], payload.get("text") or "")
+        pub_id = pubs.upsert(story_id, platform, payload_hash,
+                             int(stories.get(story_id)["version"]))
+        db.execute("UPDATE publications SET chat_id=? WHERE id=?", (str(publisher.chat_id), pub_id))
+        if result["ok"]:
+            pubs.mark(pub_id, "SENT", remote_id=str(prior["remote_id"]))
+            stories.mark_published(story_id)
+            return True
+        pubs.mark(pub_id, "FAILED", error=result.get("error"))
+        return False
+
+    return handler
+
+
 def make_publish_handler(db: Database, settings: Settings,
                          telegram_publisher_factory: Callable[[], Any]) -> Handler:
     """Publishes a story to a platform once (ledger idempotency + pauses + rate limits)."""

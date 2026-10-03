@@ -271,7 +271,12 @@ def deterministic_story_text(lifecycle: str, event: dict[str, Any],
 
 async def process_new_items(db: Database, provider: LLMProvider | None,
                             brand: Brand, settings: Any) -> dict[str, Any]:
-    """One pipeline pass over NEW items. Idempotent; safe to re-run."""
+    """One pipeline pass over NEW items. Idempotent; safe to re-run.
+    EVENT_ENGINE_V2_ENABLED=true → the P3-E V2 engine is authoritative."""
+    if getattr(settings, "event_engine_v2_enabled", False):
+        from app.newsroom.v2_pipeline import process_new_items_v2
+
+        return process_new_items_v2(db, brand, settings)
     items_repo = RawItemsRepo(db)
     events_repo = EventsRepo(db)
     stories = StoriesRepo(db)

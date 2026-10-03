@@ -35,6 +35,17 @@ def _tokens(text: str) -> set[str]:
     return {w for w in re.split(r"\s+", t) if len(w) > 1}
 
 
+# light words that must never drive a paraphrase-merge decision (§15 counts
+# CONTENT overlap only — negation/numbers/names are never in this set)
+_STOP = {"و", "است", "به", "از", "را", "با", "این", "که", "در", "برای", "آن",
+         "ها", "شد", "شده", "می", "کرد", "کند", "او", "وی", "هم", "نیز", "بر",
+         "های", "تا", "همچنان"}
+
+
+def _content_overlap(a: str, b: str) -> int:
+    return len((_tokens(a) & _tokens(b)) - _STOP)
+
+
 def _jaccard(a: set[str], b: set[str]) -> float:
     if not a or not b:
         return 0.0
@@ -84,7 +95,10 @@ def compare(claim: StructuredClaim, existing: StructuredClaim) -> ClaimDecision:
         matched.append("location")
 
     # Stage D guards (semantic-lite) — checked BEFORE lexical so critical diffs block
-    if neg_diff:
+    # NEGATION_DIFFERS requires near-identity (≥4 shared content tokens): a
+    # polarity flip of the SAME assertion is a contradiction; two different
+    # sentences of one speaker (interviews mix polarity normally) are not.
+    if neg_diff and _content_overlap(claim.text, existing.text) >= 4:
         conflicts.append("NEGATION_DIFFERS")
     if numbers_conflict:
         conflicts.append("NUMBERS_DIFFER")
@@ -104,7 +118,7 @@ def compare(claim: StructuredClaim, existing: StructuredClaim) -> ClaimDecision:
     # Stage C — lexical similarity (jaccard + containment, not alone decisive)
     jc = _jaccard(_tokens(claim.text), _tokens(existing.text))
     ct = _containment(_tokens(claim.text), _tokens(existing.text))
-    key_overlap = len(_tokens(claim.text) & _tokens(existing.text))
+    key_overlap = _content_overlap(claim.text, existing.text)
     comps = {"jaccard": round(jc, 3), "containment": round(ct, 3)}
     if jc >= 0.55 or ct >= 0.8 or key_overlap >= 3:
         # safe paraphrase: same actor (or both unknown), same certainty class

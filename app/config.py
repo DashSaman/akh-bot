@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     # P3-D — per-source context + burst aggregation (wired by P3-E; V2 stays off)
     source_context_ttl_seconds: int = 1800   # SOURCE_CONTEXT_TTL_SECONDS
     event_burst_window_seconds: int = 180    # EVENT_BURST_WINDOW_SECONDS
+    # P3-E/F — story evolution + materiality/debounce (live behind V2 flag)
+    max_public_story_details: int = 5        # MAX_PUBLIC_STORY_DETAILS cap
+    edit_debounce_seconds: int = 120         # rapid updates consolidate into one EDIT
     ingest_interval_seconds: int = 300
     pipeline_interval_seconds: int = 60
     jobs_interval_seconds: int = 10
