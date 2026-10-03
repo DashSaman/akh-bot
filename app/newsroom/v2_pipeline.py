@@ -74,7 +74,69 @@ def _claim_row_to_structured(row: dict):
     )
 
 
+def _link_evidence(db, *, claim_id: int, raw_item_id: int, decision: str,
+                   occurred: str) -> None:
+    """PART-4 EvidenceLink for one claim resolution (idempotent, never blocks)."""
+    from app.verification import evidence as ev
+
+    try:
+        ev.record_evidence_link(db, claim_id=claim_id, raw_item_id=raw_item_id,
+                                relation=ev.CONTRADICTS
+                                if decision == "POTENTIAL_CONTRADICTION"
+                                else ev.SUPPORTS,
+                                observed_at=occurred)
+    except Exception:  # noqa: BLE001
+        log.exception("evidence link failed claim=%s item=%s", claim_id, raw_item_id)
+
+
+def _record_run_for(db, *, event_id: int, claim_id: int,
+                    raw_item_id: int, decision: str) -> None:
+    """PART-4 VerificationRun for one claim resolution (idempotent)."""
+    from app.verification import evidence as ev
+    from app.verification import runs as vr
+
+    try:
+        counts = ev.link_counts(db, claim_id)
+        indep = ev.independent_origin_count(db, claim_id)
+        row = db.query_one("SELECT state, risk_level FROM claims WHERE id=?", (claim_id,))
+        high_risk = bool(row and row["risk_level"] == "high")
+        if decision == "POTENTIAL_CONTRADICTION":
+            # the contradicting claim keeps its own SUPPORTS trace; this run
+            # records the conflict without choosing a side (no fabricated resolution)
+            vr.record_run(
+                db, event_id=event_id, claim_id=claim_id, trigger=vr.CONTRADICTION,
+                result=row["state"] if row else "CONFLICTING",
+                independent_origin_count=indep, support_count=counts[ev.SUPPORTS],
+                contradiction_count=max(1, counts[ev.CONTRADICTS]),
+                high_risk=high_risk,
+                reason_codes=[decision] + (["HIGH_RISK"] if high_risk else []),
+                next_verify_seconds=vr.REVERIFY_INTERVAL_SECONDS,
+                dedupe_key="contra:%s:%s:%s" % (event_id, claim_id, raw_item_id))
+        else:
+            vr.record_run(
+                db, event_id=event_id, claim_id=claim_id, trigger=vr.NEW_EVIDENCE,
+                result=row["state"] if row else "UNVERIFIED",
+                independent_origin_count=indep, support_count=counts[ev.SUPPORTS],
+                contradiction_count=counts[ev.CONTRADICTS], high_risk=high_risk,
+                reason_codes=[decision] + (["HIGH_RISK"] if high_risk else []),
+                next_verify_seconds=vr.REVERIFY_INTERVAL_SECONDS
+                if (row and row["state"] in ("UNVERIFIED", "SINGLE_SOURCE", "CONFLICTING"))
+                else None,
+                dedupe_key="ev:%s:%s:%s" % (event_id, claim_id, raw_item_id))
+    except Exception:  # noqa: BLE001 — traceability must never block the pipeline
+        log.exception("verification trace failed claim=%s item=%s", claim_id, raw_item_id)
+
+
 def _independent_origins(db, claim_id: int) -> int:
+    """Canonical independent-origin count: EvidenceLink origins with identity
+    collapse (PART-4). Falls back to claim_source_items lineages for legacy
+    claims that predate evidence links."""
+    from app.verification import evidence as _ev
+
+    n_links = db.query_one(
+        "SELECT COUNT(*) AS n FROM evidence_links WHERE claim_id=?", (claim_id,))["n"]
+    if n_links:
+        return _ev.independent_origin_count(db, claim_id)
     rows = db.query(
         "SELECT DISTINCT COALESCE(NULLIF(r.lineage_key,''), 'src:' || r.source_id) AS lineage"
         " FROM claim_source_items csi JOIN raw_items r ON r.id=csi.source_item_id"
@@ -129,7 +191,10 @@ def _find_same_claim_event(db, claim, occurred: str) -> int | None:
     for row in rows:
         ex = _claim_row_to_structured(row)
         decision = compare(claim, ex).decision
-        if decision == "SAME_CLAIM":
+        if decision in ("SAME_CLAIM", "POTENTIAL_CONTRADICTION"):
+            # SAME: paraphrase joins its event; CONTRADICTION: a differing
+            # figure/negation about the same happening joins the event it
+            # contradicts — the conflict is preserved and traced, never merged
             return int(row["eid"])
         if decision == "AMBIGUOUS_CLAIM" \
                 and _jaccard(item_toks, _content_toks(row["text"])) >= 0.6:
@@ -224,6 +289,9 @@ def process_item_v2(db: Database, item: dict) -> dict | None:
 
     # claim dedup within the event (SAME/NEW/CONTRADICTION/AMBIGUOUS)
     claim_id, cdec = resolve_or_insert_claim(db, event_id, claim, item["id"])
+    # PART-4: EvidenceLink first — origin counts and runs read from it
+    _link_evidence(db, claim_id=claim_id, raw_item_id=item["id"],
+                   decision=cdec.decision, occurred=occurred)
     info = _store_claim_verification(db, claim_id, cdec.decision == "POTENTIAL_CONTRADICTION")
     if cdec.decision == "NEW_CLAIM":
         priors = [_claim_row_to_structured(r) for r in db.query(
@@ -240,6 +308,10 @@ def process_item_v2(db: Database, item: dict) -> dict | None:
             db.execute("UPDATE claims SET material=1, material_reasons=? WHERE id=?",
                        ("CORROBORATION", claim_id))
             _store_claim_verification(db, claim_id, has_contradiction=False)
+
+    # PART-4: VerificationRun after state updates (result = final state)
+    _record_run_for(db, event_id=event_id, claim_id=claim_id,
+                    raw_item_id=item["id"], decision=cdec.decision)
 
     # burst grouping — informational only, never delays anything (REG-037)
     try:
@@ -459,5 +531,55 @@ def process_new_items_v2(db: Database, brand, settings) -> dict:
             _publish_event(db, settings, brand, ev, summary)
             seen.add(ev["id"])
 
+    # phase 3 — PART-4 standing reverify: one SCHEDULED_REVERIFY run per
+    # unresolved event per 5-minute slot (deduped); prompt re-checks happen
+    # naturally via NEW_EVIDENCE runs in phase 1
+    _scheduled_reverify(db)
+
     summary["touched"] = len(summary["touched"])
     return summary
+
+
+def _scheduled_reverify(db) -> int:
+    """Record scheduled reverify runs for unresolved events (dedupe per slot).
+    Also refreshes event-level last_verified_at so nothing stays stale."""
+    from app.verification import evidence as ev
+    from app.verification import runs as vr
+
+    recorded = 0
+    try:
+        for evrow in db.query(
+                "SELECT DISTINCT e.id, e.status FROM events e"
+                " LEFT JOIN claims c ON c.event_id=e.id"
+                " WHERE e.status IN ('NEW','CLUSTERED','READY','HELD')"
+                "    OR c.state IN ('UNVERIFIED','SINGLE_SOURCE','CONFLICTING')"
+                " ORDER BY e.last_seen_at DESC LIMIT 40"):
+            event_id = int(evrow["id"])
+            if not vr.scheduled_reverify_due(db, event_id=event_id):
+                continue
+            claims = db.query(
+                "SELECT id, state, risk_level FROM claims WHERE event_id=? ORDER BY id LIMIT 30",
+                (event_id,))
+            unresolved = [c for c in claims
+                          if c["state"] in ("UNVERIFIED", "SINGLE_SOURCE", "CONFLICTING")]
+            if not unresolved and evrow["status"] != "HELD":
+                continue  # nothing to reverify on a clean unpublished event
+            contra = sum(1 for c in claims if c["state"] == "CONFLICTING")
+            high = any(c["risk_level"] == "high" for c in claims)
+            max_indep = 0
+            for c in unresolved or claims[:5]:
+                max_indep = max(max_indep, ev.independent_origin_count(db, int(c["id"])))
+            vr.record_run(
+                db, event_id=event_id, claim_id=None, trigger=vr.SCHEDULED_REVERIFY,
+                result="STILL_UNRESOLVED" if unresolved else "NO_CHANGE",
+                independent_origin_count=max_indep,
+                contradiction_count=contra, high_risk=high,
+                reason_codes=[c["state"] for c in unresolved[:5]] or ["EVENT_HELD"],
+                next_verify_seconds=vr.REVERIFY_INTERVAL_SECONDS,
+                dedupe_key="reverify:%s:0:%s" % (event_id, vr.due_reverify_slot()))
+            db.execute("UPDATE events SET last_verified_at=? WHERE id=?",
+                       (utcnow(), event_id))
+            recorded += 1
+    except Exception:  # noqa: BLE001 — reverify bookkeeping must never block
+        log.exception("scheduled reverify recording failed")
+    return recorded

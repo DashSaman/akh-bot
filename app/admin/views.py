@@ -287,6 +287,46 @@ async def event_detail(request: Request, event_id: int):
                                       _ctx(request, event=event, items=items, claims=claims, story=story))
 
 
+@router.get("/verification/{event_id}", response_class=HTMLResponse)
+async def verification_trace(request: Request, event_id: int):
+    """PART-4 verification traceability: claims, evidence links (supporting vs
+    contradicting), independent-origin counts, reverify schedule, run history.
+    Read-only; no secrets."""
+    if (r := await require_login(request)):
+        return r
+    db = _db(request)
+    event = EventsRepo(db).get(event_id)
+    if not event:
+        return RedirectResponse("/admin/events", status_code=303)
+    claims = ClaimsRepo(db).for_event(event_id)
+    from app.verification import evidence as ev
+    from app.verification.runs import runs_for_event
+
+    claim_rows = []
+    for c in claims:
+        links = db.query(
+            "SELECT el.relation, el.raw_item_id, el.source_id, el.lineage_key,"
+            " s.name AS source_name FROM evidence_links el"
+            " JOIN sources s ON s.id=el.source_id"
+            " WHERE el.claim_id=? ORDER BY el.relation, el.id", (c["id"],))
+        claim_rows.append({
+            "id": c["id"], "text": c["text"], "state": c["state"],
+            "risk": c["risk_level"], "material": c["material"],
+            "independent": ev.independent_origin_count(db, int(c["id"])),
+            "supports": [dict(l) for l in links if l["relation"] == ev.SUPPORTS],
+            "contradicts": [dict(l) for l in links if l["relation"] == ev.CONTRADICTS],
+            "contexts": [dict(l) for l in links if l["relation"] == ev.CONTEXT],
+            "last_verified_at": c["last_verified_at"],
+            "next_verify_at": c["next_verify_at"],
+            "attempts": c["verification_attempts"],
+        })
+    runs = runs_for_event(db, event_id, limit=100)
+    return templates.TemplateResponse(
+        request, "admin/verification.html",
+        _ctx(request, event=event, claims=claim_rows, runs=runs,
+             story=StoriesRepo(db).by_event(event_id)))
+
+
 @router.get("/publications", response_class=HTMLResponse)
 async def publications_page(request: Request):
     if (r := await require_login(request)):

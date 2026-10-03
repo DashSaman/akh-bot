@@ -1,0 +1,62 @@
+{% extends "admin/base.html" %}
+{% block title %}ردیابی راستی‌آزمایی رویداد {{ event.id }}{% endblock %}
+{% block content %}
+<h1>ردیابی راستی‌آزمایی — رویداد #{{ event.id }}</h1>
+<p><b>{{ event.title }}</b></p>
+<p>وضعیت: {{ event.status }} · راستی‌آزمایی: {{ event.verification }} ·
+   آخرین بررسی: <span dir="ltr">{{ event.last_verified_at or '—' }}</span></p>
+{% if story %}
+<p>خبر: <a href="/story/{{ story.slug }}" target="_blank">{{ story.headline }}</a> (نسخه {{ story.version }})</p>
+{% endif %}
+
+<h2>ادعاها و شواهد</h2>
+{% for c in claims %}
+<div class="card" style="margin-bottom:12px;padding:10px;border:1px solid #ccc;border-radius:8px">
+  <p><b>ادعا #{{ c.id }}</b> · حالت: <b>{{ c.state }}</b> · ریسک: {{ c.risk }} ·
+     خاستگاه مستقل: <b>{{ c.independent }}</b> · تلاش راستی‌آزمایی: {{ c.attempts }}</p>
+  <p class="small">{{ c.text }}</p>
+  <p class="small">آخرین بررسی: <span dir="ltr">{{ c.last_verified_at or '—' }}</span> ·
+     بررسی بعدی: <span dir="ltr">{{ c.next_verify_at or '—' }}</span></p>
+  {% if c.supports %}
+  <p class="small">شواهد تأییدکننده:</p>
+  <ul class="small">
+    {% for l in c.supports %}<li>{{ l.source_name }} (آیتم {{ l.raw_item_id }}) · خاستگاه: <span dir="ltr">{{ l.lineage_key or 'src:' ~ l.source_id }}</span></li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if c.contradicts %}
+  <p class="small"><b>شواهد متناقض:</b></p>
+  <ul class="small">
+    {% for l in c.contradicts %}<li>{{ l.source_name }} (آیتم {{ l.raw_item_id }})</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if c.contexts %}
+  <p class="small">شواهد زمینه‌ای: {{ c.contexts|length }} مورد</p>
+  {% endif %}
+</div>
+{% else %}
+<p>ادعایی ثبت نشده است.</p>
+{% endfor %}
+
+<h2>تاریخچه اجرای راستی‌آزمایی</h2>
+<table>
+  <tr><th>شناسه</th><th>ادعا</th><th>محرک</th><th>نتیجه</th><th>خاستگاه مستقل</th><th>تأیید</th><th>تناقض</th><th>ریسک بالا</th><th>دلایل</th><th>بررسی بعدی</th><th>زمان</th></tr>
+  {% for r in runs %}
+  <tr>
+    <td>{{ r.id }}</td>
+    <td>{{ r.claim_id or 'رویداد' }}</td>
+    <td><span dir="ltr">{{ r.trigger }}</span></td>
+    <td><span dir="ltr">{{ r.result }}</span></td>
+    <td>{{ r.independent_origin_count }}</td>
+    <td>{{ r.support_count }}</td>
+    <td>{{ r.contradiction_count }}</td>
+    <td>{{ 'بله' if r.high_risk else 'خیر' }}</td>
+    <td class="small"><span dir="ltr">{{ r.reason_codes }}</span></td>
+    <td class="small"><span dir="ltr">{{ r.next_verify_at or '—' }}</span></td>
+    <td class="small"><span dir="ltr">{{ r.started_at }}</span></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="11">اجرایی ثبت نشده است.</td></tr>
+  {% endfor %}
+</table>
+<p><a href="/admin/events/{{ event.id }}">← صفحه رویداد</a></p>
+{% endblock %}

@@ -66,6 +66,11 @@ def evaluate(text: str, source_language: str = "fa",
                 missing.remove("object_")
                 break
     # slot-fill fallbacks from deterministic extraction (never fabricated):
+    if cls == ClaimClass.MARKET and "object_" in missing:
+        for kw in ("دلار", "طلا", "سکه", "بورس", "شاخص", "نفت", "ارز", "تومان", "یورو"):
+            if kw in t:
+                missing.remove("object_")
+                break
     if cls == ClaimClass.MARKET and "time_ref" in missing:
         if claim.time_ref or "امروز" in t or "امشب" in t:
             missing.remove("time_ref")

@@ -463,6 +463,18 @@ def _resolve_deadlines(db: Database, settings: Any, brand: Brand) -> int:
         draft = {"headline": st["headline"], "lead": st["lead"],
                  "platform_variants": {"telegram": text}, "generation_mode": "DETERMINISTIC"}
         repo.set_lifecycle(st["id"], "ARCHIVED", "unverified_expired: 60-minute resolution deadline", draft)
+        # PART-4: traceable DEADLINE VerificationRun (event-level, idempotent)
+        try:
+            from app.verification import runs as vr
+            vr.record_run(
+                db, event_id=int(st["event_id"]), claim_id=None, trigger=vr.DEADLINE,
+                result="UNVERIFIED_EXPIRED",
+                reason_codes=["DEADLINE_60MIN", "RESOLVED_ARCHIVED"],
+                dedupe_key="deadline:%s" % int(st["id"]))
+            db.execute("UPDATE events SET last_verified_at=? WHERE id=?",
+                       (utcnow(), int(st["event_id"])))
+        except Exception:  # noqa: BLE001 — traceability never blocks resolution
+            pass
         ph = sha256_hex(text)
         pid = PublicationsRepo(db).upsert(st["id"], "telegram", ph, repo.get(st["id"])["version"])
         JobsRepo(db).enqueue("publish_telegram",
