@@ -118,7 +118,12 @@ def compare(claim: StructuredClaim, existing: StructuredClaim) -> ClaimDecision:
     # Stage C — lexical similarity (jaccard + containment, not alone decisive)
     jc = _jaccard(_tokens(claim.text), _tokens(existing.text))
     ct = _containment(_tokens(claim.text), _tokens(existing.text))
-    key_overlap = _content_overlap(claim.text, existing.text)
+    content_overlap = _content_overlap(claim.text, existing.text)
+    # paraphrase convergence needs BOTH an absolute count AND a ratio floor:
+    # 3 shared light-word-free tokens of a 20-token report (0.19) is nothing,
+    # 4 of 9 in a short claim (0.57) is a real paraphrase
+    min_len = min(len(_tokens(claim.text) - _STOP), len(_tokens(existing.text) - _STOP))
+    key_overlap = content_overlap if content_overlap >= max(3, 0.25 * max(1, min_len)) else 0
     comps = {"jaccard": round(jc, 3), "containment": round(ct, 3)}
     if jc >= 0.55 or ct >= 0.8 or key_overlap >= 3:
         # safe paraphrase: same actor (or both unknown), same certainty class
