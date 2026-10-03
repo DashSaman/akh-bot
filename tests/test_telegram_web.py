@@ -58,7 +58,63 @@ def test_fetch_stores_items_once(db):
     finally:
         tgw.httpx.AsyncClient = orig_client
     assert s1["new"] == 2 and s1["skipped"] == 0
-    assert s2["new"] == 0 and s2["skipped"] == 2  # idempotent re-fetch
+    assert s2["new"] == 0 and s2["skipped"] == 0  # idempotent re-fetch (below-watermark items are persisted territory)
     rows = RawItemsRepo(db).list()
     assert rows[0]["activation_ok"] in (0, 1)  # guard applied by activated_at
     assert rows[0]["lineage_key"] == "tgweb:somechannel"
+
+
+def _burst_page(handle: str, start: int, count: int) -> str:
+    """t.me/s page carrying `count` consecutive messages (a live burst)."""
+    blocks = []
+    for i in range(start + count - 1, start - 1, -1):  # newest first on page
+        blocks.append(
+            f'''<div class="tgme_widget_message_wrap">
+<div class="tgme_widget_message js-widget_message" data-post="{handle}/{i}"">
+<div class="tgme_widget_message_bubble">
+  <div class="tgme_widget_message_text js-message_text" dir="auto">پیام شماره {i} درباره بازار و اقتصام</div>
+  <div class="tgme_widget_message_footer"><time datetime="2026-09-30T16:00:00+00:00"></time></div>
+</div></div></div>''')
+    return "<html><body>" + "\n".join(blocks) + "</body></html>"
+
+
+def test_burst_over_insert_limit_never_loses_messages(db):
+    """INGEST-002 persist-then-advance: a burst larger than the per-pass
+    insert limit (20) must be fully ingested across passes — the watermark
+    may NEVER advance past unpersisted messages."""
+    from app.db.repo import RawItemsRepo, SourcesRepo
+
+    handle = "burstchan"
+    sid = SourcesRepo(db).create(name="burst", platform="telegram",
+                                 external_id=handle, status="APPROVED",
+                                 source_type="telegram_web_preview")
+    page = _burst_page(handle, 100, 25)  # messages 100..124
+
+    import httpx
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, text=page))
+    import app.ingestion.telegram_web as tgw
+
+    orig_client = tgw.httpx.AsyncClient
+    tgw.httpx.AsyncClient = lambda **kw: orig_client(transport=transport, **kw)
+    try:
+        s1 = asyncio.run(tgw.fetch_telegram_web_source(src := SourcesRepo(db).get(sid), db))
+        src = SourcesRepo(db).get(sid)
+        s2 = asyncio.run(tgw.fetch_telegram_web_source(src, db))
+        src = SourcesRepo(db).get(sid)
+        s3 = asyncio.run(tgw.fetch_telegram_web_source(src, db))
+    finally:
+        tgw.httpx.AsyncClient = orig_client
+
+    total_new = s1["new"] + s2["new"] + s3["new"]
+    assert total_new == 25, f"burst must be fully ingested across passes, got {total_new}"
+    import json as _json
+
+    wm = int(_json.loads(SourcesRepo(db).get(sid)["fetch_state"])["watermark"])
+    n_stored = len(RawItemsRepo(db).list())
+    assert n_stored == 25
+    assert wm == 124, "watermark reaches the last PERSISTED message only"
+    # fourth pass: nothing new, nothing lost
+    src = SourcesRepo(db).get(sid)
+    s4 = asyncio.run(tgw.fetch_telegram_web_source(src, db))
+    assert s4["new"] == 0 and len(RawItemsRepo(db).list()) == 25

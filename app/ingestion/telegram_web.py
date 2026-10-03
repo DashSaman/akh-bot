@@ -92,21 +92,18 @@ async def fetch_telegram_web_source(source: dict[str, Any], db: Any, limit: int 
                     break
         resp_text_marker = True
         msgs_all = all_msgs
-        max_id = max((int(m["post"].split("/")[-1]) for m in all_msgs), default=watermark)
-        if max_id > watermark:
-            state["watermark"] = max_id
-        if False:
-            sources.mark_fetch(source["id"], False, f"preview unavailable: HTTP {resp.status_code}")
-            summary["error"] = f"HTTP {resp.status_code}"
-            return summary
         activated = parse_iso(source["activated_at"])
-        for msg in msgs_all[:limit]:
+        # oldest-first, only ABOVE the persisted watermark (pages are
+        # newest-first); per-pass limit applies to the pending set so bursts
+        # larger than `limit` are caught up over passes without any loss
+        pending = [m for m in reversed(msgs_all)
+                   if not (watermark and int(m["post"].split("/")[-1]) <= watermark)]
+        inserted_max = 0
+        for msg in pending[:limit]:
             external_key = f"tgweb:{msg['post']}"
             mid_num = int(msg["post"].split("/")[-1])
             if items.exists(source["id"], external_key):
-                summary["skipped"] += 1
-                continue
-            if watermark and mid_num <= watermark:
+                inserted_max = max(inserted_max, mid_num)  # already persisted
                 summary["skipped"] += 1
                 continue
             published = parse_iso(msg["published"])
@@ -120,7 +117,14 @@ async def fetch_telegram_web_source(source: dict[str, Any], db: Any, limit: int 
                 published_at=msg["published"], lineage_key=f"tgweb:{handle}",
                 activation_ok=activation_ok, fingerprints=fp,
             )
+            inserted_max = max(inserted_max, mid_num)
             summary["new"] += 1
+        # PERSIST-THEN-ADVANCE (INGEST-002): the watermark may only move past
+        # messages that are DURABLY persisted (or already present). Advancing
+        # to the page max while inserting only the first `limit` messages
+        # permanently skipped the remainder on bursts (>20 between passes).
+        if inserted_max > watermark:
+            state["watermark"] = inserted_max
         sources.mark_fetch(source["id"], True, fetch_state=state)
         return summary
     except httpx.HTTPError as e:
