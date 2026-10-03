@@ -96,7 +96,7 @@ class FreeAiRouter:
                  if p.strip()]
         disabled = disabled or set()
         models = {
-            "groq": e.get("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            "groq": e.get("GROQ_MODEL", "qwen/qwen3.8-27b"),
             "gemini": e.get("GEMINI_MODEL", "gemini-2.0-flash"),
             "openrouter": e.get("OPENROUTER_MODEL",
                                 "meta-llama/llama-3.3-70b-instruct:free"),

@@ -176,6 +176,13 @@ def test_negation_reversal_rejected():
         "الجيش لم يؤكد الحادثة", "ارتش حمله را تأیید کرد")
 
 
+def test_negation_participle_not_false_positive():
+    # qwen-style rewrite: negation via participle «نرفته» / prefix «غیر»
+    assert consistency_issues(
+        "قال مصدر إن الغارة لم تستهدف مدنيين",
+        "منبع نظامی: حمله مستقیماً به غیرنظامیان نشانه نرفته است") == []
+
+
 def test_certainty_escalation_rejected():
     # may/ممکن است → قطعاً
     assert "CERTAINTY_ESCALATED" in consistency_issues(
