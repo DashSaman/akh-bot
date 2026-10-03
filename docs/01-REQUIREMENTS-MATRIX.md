@@ -58,7 +58,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | ADMIN-003 | Manual news intake (web+inbox) | MISSING | — | — | — | — | 9affb54 | Part 7 | 7 |
 | ADMIN-004 | Health/24-7 dashboard page | PARTIAL | doctor.sh + heartbeats in DB | — | doctor exit 0 | — | 9affb54 | full admin page missing | 7 |
 | AI-001 | Optional, zero-cost router | DONE | integrations/llm/router.py (config-resolved providers, per-provider state, ZERO_COST/AI_FREE_ONLY, key redaction) | tests/test_translation_ai.py | 0 keys → NOT_CONFIGURED states exposed on /admin/ai; deterministic newsroom unaffected | AI-USE-POLICY | PART5 | live call awaits owner key | 5 |
-| AI-002 | Provider failover A→B→C→det | PARTIAL | router failover loop (A-fail→B, 429→RATE_LIMITED, all-fail→None/HOLD) | tests/test_translation_ai.py (failover, all-fail, rate-limit) | unit+mock proven; LIVE proof awaits owner key | — | PART5 | BLOCKED_EXTERNAL for live proof (no key) | 5 |
+| AI-002 | Provider failover A→B→C→det | BLOCKED_EXTERNAL | router failover loop (A-fail→B, 429→RATE_LIMITED, all-fail→None/HOLD) | tests/test_translation_ai.py (failover, all-fail, rate-limit) | unit+mock proven; LIVE proof impossible without a provider key | — | PART5 | owner free key unblocks live proof | 5 |
 | AI-003 | Factual consistency audit of AI output | DONE | translator.consistency_issues (NUMBERS_INVENTED/NEGATION_REVERSED incl ar/he/CERTAINTY_ESCALATED/FOREIGN_OUTPUT) | tests/test_translation_ai.py (numbers/negation/uncertainty rejects) | reject → HOLD live in V2 path | — | PART5 | — | 5 |
 | AUT-001 | 24/7 in-container workers, no agent | DONE | lifespan 6 tasks + restart unless-stopped | restart tests | soak metrics jsonl | AUTONOMY | 69059ab | — | — |
 | AUT-002 | Watchdog + orphan + SLA markers | DONE | watchdog_loop | test suite | hb fresh, orphan=0 | — | 69059ab | — | — |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 49 · PARTIAL 6 · BROKEN 0 · MISSING 3 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 49 · PARTIAL 5 · BROKEN 0 · MISSING 3 · BLOCKED_EXTERNAL 4 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
