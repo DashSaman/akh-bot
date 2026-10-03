@@ -64,8 +64,13 @@ def extract_json(raw: str) -> dict[str, Any]:
         raise LlmMalformedJson("no JSON object found")
     try:
         obj = json.loads(text[start : end + 1])
-    except json.JSONDecodeError as e:
-        raise LlmMalformedJson(str(e)) from e
+    except json.JSONDecodeError:
+        # reasoning models sometimes emit TWO objects or trailing junk after
+        # the first one — take the FIRST complete object instead of failing
+        try:
+            obj, _ = json.JSONDecoder().raw_decode(text[start:])
+        except ValueError as e:
+            raise LlmMalformedJson(str(e)) from e
     if not isinstance(obj, dict):
         raise LlmMalformedJson("response is not an object")
     return obj

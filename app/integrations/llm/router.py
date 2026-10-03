@@ -38,6 +38,38 @@ _SECRET_RE = re.compile(r"(?:(?<=sk-)[A-Za-z0-9_\-]{8,}"
                         r"|(?<=key=)[A-Za-z0-9_\-]{8,})")
 
 
+def _parse_first_json(text: str) -> dict[str, Any]:
+    """Parse the FIRST JSON object in a response body.
+
+    9Router (openai_compat gateway) may append trailing stream/meta data
+    after the JSON object (strict json.loads would raise 'Extra data'), or
+    answer with SSE `data:` lines — both are handled here.
+    """
+    import json
+
+    try:
+        return json.loads(text)
+    except ValueError:
+        pass
+    body = text.strip()
+    if body.startswith("data:"):  # SSE: last non-done data line holds the full message
+        last = ""
+        for line in body.splitlines():
+            chunk = line.strip()
+            if chunk.startswith("data:") and "[DONE]" not in chunk:
+                last = chunk[5:].strip()
+        if last:
+            try:
+                return json.loads(last)
+            except ValueError:
+                body = last
+    start = body.find("{")
+    if start < 0:
+        raise LlmError("no JSON object found")
+    obj, _ = json.JSONDecoder().raw_decode(body[start:])
+    return obj
+
+
 def redact(text: str) -> str:
     """Strip anything that looks like an API key from an error/log string."""
     return _SECRET_RE.sub("[REDACTED]", text or "")
@@ -178,6 +210,7 @@ class FreeAiRouter:
                        "messages": [{"role": "system", "content": system},
                                     {"role": "user", "content": user}],
                        "temperature": 0.2, "max_tokens": max_tokens,
+                       "stream": False,
                        "response_format": {"type": "json_object"}}
         async with httpx.AsyncClient(timeout=45, transport=self.transport) as client:
             resp = await client.post(url, json=payload, headers=headers)
@@ -185,7 +218,11 @@ class FreeAiRouter:
             raise LlmError("HTTP 429 rate limited")
         if resp.status_code != 200:
             raise LlmError(f"HTTP {resp.status_code}: {redact(resp.text[:120])}")
-        data = resp.json()
+        data = _parse_first_json(resp.text)
         if st.name == "gemini":
             return data["candidates"][0]["content"]["parts"][0]["text"]
-        return data["choices"][0]["message"]["content"] or ""
+        msg = (data.get("choices") or [{}])[0].get("message") or {}
+        content = msg.get("content") or ""
+        if not content and msg.get("reasoning"):  # gpt-oss style: reasoning-only turn
+            raise LlmError("empty content (reasoning-only response)")
+        return content
