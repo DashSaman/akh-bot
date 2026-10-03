@@ -13,7 +13,7 @@ Scope guard: PART 3 owns CLAIM-001/002/003, EVENT-001/002/003, PUB-003, GATE-03/
 | EVENT-001 multi-signal identity | P3-B | test_event_identity.py (EventFingerprint §3; wording-change REG-040; hard-conflict table §4) |
 | GATE-05 three-way decision | P3-B | ATTACH_EXISTING/CREATE_NEW/AMBIGUOUS_EVENT (§5; ambiguity never merges) |
 | EVENT-002 same-event→EDIT invariant | P3-E | test_edit_vs_send.py (§21 architectural guard: publication-exists⇒EDIT-only job type) |
-| EVENT-003 burst/continuation windows | P3-D | test_burst_context.py (§7 separate windows; context types §6; TTL §19) |
+| EVENT-003 burst/continuation windows | P3-D | test_source_context.py + test_burst.py (§7 separate windows; context types §6; TTL §19) |
 | PUB-003 importance floor audit | P3-F | test_importance_audit.py (§27 distribution fixtures, not eyeballing) |
 | REG-028 micro-post flood | P3-B+E | six-fragment fixture (§11: 6 RawItems → N≤6 complete claims → 1 Event → 1 Story → 1 SEND) |
 | REG-029 interview multi-post | P3-B/D | interview continuation: hours allowed (§6) |
@@ -51,7 +51,7 @@ Scope guard: PART 3 owns CLAIM-001/002/003, EVENT-001/002/003, PUB-003, GATE-03/
 - Normalization (§13): unify ar/fa variants, ZWNJ, emojis, boilerplate, speaker-prefix — NEVER strip negation/numbers/dates/names/modals («نیست/نخواهد/ممکن است/گفته می‌شود»)
 - Critical-diff blocklist: differing number/negation/actor/target/location ⇒ POTENTIAL_CONTRADICTION (kept distinct; handling itself = Part 4)
 - States (§17): SAME_CLAIM / NEW_CLAIM / POTENTIAL_CONTRADICTION / AMBIGUOUS_CLAIM
-- Files: app/newsroom/claim_compare.py; index claims(fingerprint) unique-per-event
+- Files: app/newsroom/claim_compare.py; provenance index claim_source_items UNIQUE(claim_id,source_item_id) — claim fingerprint is descriptive comparison metadata, NEVER a unique key (a UNIQUE(event,fingerprint) constraint would be unsafe: two real events may legitimately produce equal fingerprints, and distinct contradictions must never be merged)
 - Tests first: §16 triple table + paraphrase-convergence §15 + §49 C/D/H
 - Commit: `feat(P3-C): multi-stage claim comparison with contradiction guards`
 

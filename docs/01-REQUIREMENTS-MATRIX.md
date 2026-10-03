@@ -25,7 +25,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | CLAIM-003 | Cross-message claim dedup/merge (GATE-06) | PARTIAL | claim_compare.py (4-state pipeline) | tests/test_claim_dedup.py (15) | behind V2=false; live closure P3-H/I | DATA-MODEL.md | b9b1b2e | DONE waits live | 3 |
 | EVENT-001 | One real-world event grouping (multi-signal identity) | PARTIAL | event_fingerprint.py + matcher (3-way, hard conflicts, per-type continuation) | tests/test_event_matcher.py (12) | implemented+tested behind V2=false; live closure waits P3-H/I | DATA-MODEL.md | abfcf9d | — | 3 |
 | EVENT-002 | Same-event update edits same message (INV-012) | PARTIAL | ledger edit path exists | test_breaking_flow | msg 109→109 proven once | — | 9affb54 | not wired to new-claim-for-event flow | 3 |
-| EVENT-003 | Burst aggregation windows | MISSING | — (config keys absent) | — | — | — | 9affb54 | spec keys EVENT_BURST_* undefined | 3 |
+| EVENT-003 | Burst aggregation windows | PARTIAL | source_context.py + burst.py (SOURCE_CONTEXT_TTL_SECONDS / EVENT_BURST_WINDOW_SECONDS, semantic grouping ≠ time-only) | tests/test_source_context.py (12) + tests/test_burst.py (16) | schema 12 tables empty (dormant); behind V2=false until P3-E wiring | DATA-MODEL.md | 2d2851f | NOT_LIVE_YET; grouping never delays publication (breaking-safe by design) | 3 |
 | VERIFY-001 | Hard gates (high-risk single-source, conflict) | DONE | verification/gates.py | test_pipeline held cases | HELD=59 live | VERIFICATION.md | 69059ab | — | — |
 | VERIFY-002 | Independent-origin count (lineage) | DONE | lineage_key collapse | test_pipeline 5→1 | works | — | 69059ab | — | — |
 | VERIFY-003 | 5-min reverification incl HELD | DONE | reverification_loop ACTIVE_EVENT_STATUSES | test_autonomy.py | reverify hb fresh | — | 69059ab | — | — |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 37 · PARTIAL 14 · BROKEN 0 · MISSING 7 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 37 · PARTIAL 15 · BROKEN 0 · MISSING 6 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)

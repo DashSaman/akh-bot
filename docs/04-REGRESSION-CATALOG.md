@@ -33,13 +33,13 @@
 | REG-028 | same-event micro-post flood | every item → own event | INV-009/010 | burst-merge test | **OBSERVED (1020 events/2ch)** → Part 3 |
 | REG-029 | one interview → multiple posts | no claim clustering | INV-009 | interview-fixture test | PARTIAL — matcher behind V2 → live closure P3-D/E |
 | REG-030 | source emoji/markup leaks | copy from source | EDIT spec | sanitizer emoji test | FIXED (emoji stripped in gate path) |
-| REG-031 | incomplete speaker prefix published | no completeness gate | INV-011/GATE-03 | WHO+WHAT test | **OBSERVED** («ترامپ به مجله تایم:» pattern) → Part 3 |
+| REG-031 | incomplete speaker prefix published | no completeness gate | INV-011/GATE-03 | WHO+WHAT test + tests/test_source_context.py (prefix-alone → 0 claim/event/story/pub) | **OBSERVED** («ترامپ به مجله تایم:» pattern) → Part 3 · context-inheritance portion IMPLEMENTED+TESTED behind V2 (P3-D; fragment rules unchanged) |
 | REG-032 | router exists, runtime never calls it | wiring partial | INV-017 | router-used test | PARTIAL (wired via settings._ai_router; no keys to prove live) → Part 5 |
 | REG-033 | runtime depends on agent | — | INV-021 | soak evidence | FIXED+TESTED (24/7 in-container) |
 | REG-034 | low-value crowds breaking | floor missing/loose | GATE-12 | floor tuning test | PARTIAL (floor=20 exists; observe) → Part 3 |
 | REG-035 | media cache threatens disk | no TTL/cap | INV-020 | cleanup/TTL tests | FIXED+TESTED |
 | REG-036 | new claim → new post instead of edit | edit not wired to merge flow | INV-012 | claim-merge→edit test | **OBSERVED** → Part 3 |
-| REG-037 | burst messages fail to aggregate | no window config | EVENT spec keys | burst-window test | MISSING → Part 3 |
+| REG-037 | burst messages fail to aggregate | no window config | EVENT spec keys | tests/test_burst.py (16: semantic grouping, window≠continuation, boundary separation, idempotent replay) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — grouping info only; P3-E wires publication) |
 | REG-038 | same claim paraphrase → multiple stories | Jaccard-only dedup | INV-014 | tests/test_claim_dedup.py (safe-paraphrase SAME + 14 guards) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — closure P3-H/I) |
-| REG-039 | quote fragment without context | no completeness | GATE-03 | quote-context test | OBSERVED → Part 3 |
+| REG-039 | quote fragment without context | no completeness | GATE-03 | tests/test_source_context.py (12: inherit/TTL/speaker-reset/topic-reset/cross-source) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — context store dormant until P3-E wiring) |
 | REG-040 | event identity changes with wording | title-keyed clustering | EVENT_IDENTITY | stable-identity test | OBSERVED → Part 3 |
