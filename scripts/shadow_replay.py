@@ -135,21 +135,42 @@ def main() -> int:
     if bad_head:
         failures.append(f"I3 invalid/fragment headlines in stories: {bad_head}")
 
-    # I4 — paraphrase duplicates across events (real structured fields, not
-    # bare texts: actor/certainty differences are real differences)
+    # I4 — paraphrase duplicates across events (real structured fields).
+    # Policy-intended separation is NOT a failure: when the two events fall
+    # outside the continuation window of their event type (P3-B §23 — e.g.
+    # MILITARY_STRIKE strict 45min), separation is the DESIGNED behavior
+    # (under-merge is safe; over-merge never is). Only flag SAME_CLAIM pairs
+    # whose events were inside each other's continuation window (matcher
+    # could and should have attached them).
+    from datetime import datetime as _dt
+
+    from app.newsroom.event_fingerprint import CONTINUATION_MINUTES
+
+    ev_rows = {e["id"]: e for e in events}
     dup_pairs = []
     top = {}
     for c in claims:
         top.setdefault(c["event_id"], []).append(c)
+
+    def _within_window(e1: dict, e2: dict) -> bool:
+        try:
+            t1 = _dt.fromisoformat(e1["last_seen_at"])
+            t2 = _dt.fromisoformat(e2["last_seen_at"])
+        except (TypeError, ValueError):
+            return False
+        mins = CONTINUATION_MINUTES.get(e1.get("event_type") or "", 90)
+        return abs((t1 - t2).total_seconds()) / 60 <= mins
+
     eids = sorted(top)
-    for i, e1 in enumerate(eids):
-        for e2 in eids[i + 1:]:
-            for c1 in top[e1][:3]:
-                for c2 in top[e2][:3]:
+    for i, e1id in enumerate(eids):
+        for e2id in eids[i + 1:]:
+            for c1 in top[e1id][:3]:
+                for c2 in top[e2id][:3]:
                     d = compare(_claim_row_to_structured(c1),
                                 _claim_row_to_structured(c2))
-                    if d.decision == "SAME_CLAIM":
-                        dup_pairs.append((e1, e2, c1["id"], c2["id"]))
+                    if d.decision == "SAME_CLAIM" and _within_window(
+                            ev_rows.get(e1id, {}), ev_rows.get(e2id, {})):
+                        dup_pairs.append((e1id, e2id, c1["id"], c2["id"]))
     if dup_pairs:
         failures.append(f"I4 paraphrase duplicate events: {dup_pairs[:5]}")
 
