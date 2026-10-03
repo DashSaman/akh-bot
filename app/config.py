@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # P3-E/F — story evolution + materiality/debounce (live behind V2 flag)
     max_public_story_details: int = 5        # MAX_PUBLIC_STORY_DETAILS cap
     edit_debounce_seconds: int = 120         # rapid updates consolidate into one EDIT
+    # MEDIA_FALLBACK_CARDS_ENABLED: OFF until the new card renderer passes
+    # its 10-fixture visual regression (broken-card owner screenshot).
+    media_fallback_cards_enabled: bool = False
     ingest_interval_seconds: int = 300
     pipeline_interval_seconds: int = 60
     jobs_interval_seconds: int = 10

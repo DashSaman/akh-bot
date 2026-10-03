@@ -107,8 +107,9 @@ def test_v2_publish_attaches_media_payload(db, settings):
     assert story, "story created"
     assets = M.assets_for_story(db, story["id"])
     labels = {a["status"] for a in assets}
-    assert "SOURCE_REFERENCE" in labels and "BRANDED_FALLBACK" in labels
+    # broken-card regression: fallback card OFF by default (text-only posts)
+    assert "SOURCE_REFERENCE" in labels and "BRANDED_FALLBACK" not in labels
     job = db.query_one("SELECT payload_json FROM jobs WHERE job_type='publish_send'")
     import json
     payload = json.loads(job["payload_json"])
-    assert payload.get("media_path"), "send job carries the best asset path"
+    assert not payload.get("media_path"), "no broken card in send payload while disabled"

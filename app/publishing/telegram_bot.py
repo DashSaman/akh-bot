@@ -239,6 +239,13 @@ class TelegramBotPublisher:
         import os as _os
         if not publisher_language_gate(caption):
             return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
+        # Markdown markers must NEVER reach Telegram (owner screenshot regression):
+        # clip raw text (never splitting a ** pair), then convert to HTML.
+        cap = caption or ""
+        if len(cap) > 1020:
+            cap = cap[:1020]
+            if cap.count("**") % 2:
+                cap = cap.rsplit("**", 1)[0].rstrip()
         field = 'video' if video else 'photo'
         try:
             fh = open(path, 'rb')
@@ -248,7 +255,7 @@ class TelegramBotPublisher:
             async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
                 resp = await client.post(
                     '%s/%s' % (self.base, 'sendVideo' if video else 'sendPhoto'),
-                    data={'chat_id': self.chat_id, 'caption': caption[:1024], 'parse_mode': 'HTML'},
+                    data={'chat_id': self.chat_id, 'caption': to_telegram_html(cap), 'parse_mode': 'HTML'},
                     files={field: (_os.path.basename(path), fh)})
             data = resp.json()
         finally:

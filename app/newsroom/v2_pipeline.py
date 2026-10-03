@@ -354,7 +354,7 @@ def _enqueue_send(db, settings, story_id: int, text: str, ph: str, pub_id: int,
         dedupe_key="send:%s:telegram:%s" % (story_id, ph[:16]), priority=priority)
 
 
-def _attach_event_media(db, event_id: int, story_id: int, headline: str,
+def _attach_event_media(db, settings, event_id: int, story_id: int, headline: str,
                         lifecycle: str) -> None:
     """PART-6: register the event's media references as SOURCE_REFERENCE
     (original bytes need Telethon — BLOCKED until the owner session exists),
@@ -377,10 +377,14 @@ def _attach_event_media(db, event_id: int, story_id: int, headline: str,
                         db, url=url, story_id=story_id, event_id=event_id,
                         raw_item_id=it["id"], source_id=it["source_id"],
                         caption_ref=headline[:80])
-        icon = {"PROVISIONAL": "🔴", "CONFLICTING": "🟠"}.get(lifecycle, "🟢")
-        media_mod.register_branded_fallback(db, story_id=story_id,
-                                            event_id=event_id,
-                                            headline=headline, icon=icon)
+        # MEDIA-REGRESSION (owner screenshot): the old Pillow fallback card
+        # renders broken Persian (no shaping/font). Cards stay OFF until the
+        # new renderer passes its visual fixtures — text-only meanwhile.
+        if getattr(settings, "media_fallback_cards_enabled", False):
+            icon = {"PROVISIONAL": "🔴", "CONFLICTING": "🟠"}.get(lifecycle, "🟢")
+            media_mod.register_branded_fallback(db, story_id=story_id,
+                                                event_id=event_id,
+                                                headline=headline, icon=icon)
     except Exception:  # noqa: BLE001 — media must never block publication
         log.exception("media attach failed event %s", event_id)
 
@@ -524,7 +528,7 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
                  "language": "fa", "topic": "V2"}
         story_id = stories.create(event["id"], content["headline"], content["lead"], draft)
         db.execute("UPDATE stories SET lifecycle=? WHERE id=?", (content["lifecycle"], story_id))
-        _attach_event_media(db, event["id"], story_id, content["headline"],
+        _attach_event_media(db, settings, event["id"], story_id, content["headline"],
                             content["lifecycle"])
         pub_id = PublicationsRepo(db).upsert(story_id, "telegram", ph, 1)
         _enqueue_send(db, settings, story_id, text, ph, pub_id, content["lifecycle"],
