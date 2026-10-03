@@ -20,12 +20,12 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | INGEST-002 | Watermark pagination (no >20 loss) | DONE | telegram_web.py ?before= pages | test_telegram_web.py | lag=0 both channels | — | 69059ab | — | — |
 | INGEST-003 | Telethon realtime NewMessage | BLOCKED_EXTERNAL | telethon_listener.py (persistent client, dynamic map, bounded reconnect, edit/delete, fallback-dedup) + lifespan task | tests/test_telethon_listener.py (7 mocks) | runtime TELETHON_AUTH_REQUIRED (env session absent); WEB_FALLBACK active 30s | — | 69059ab | owner session absent; DONE requires live <5s proof (§33) | 2 |
 | INGEST-004 | Restart recovery of all workers | DONE | lifespan tasks + jobs requeue_running | test_jobs via suite | hb all fresh post-restart ×N | OPERATIONS | 69059ab | — | — |
-| CLAIM-001 | Structured atomic claims | PARTIAL | app/newsroom/claim_model.py (StructuredClaim, ClaimClass, extractor) | tests/test_claim_model.py (6) | V2 flag OFF — parser inactive in prod pipeline until P3-B/C wiring | DATA-MODEL.md | 8668402 | DONE waits P3-H/I live | 3 |
-| CLAIM-002 | Claim completeness gate (GATE-03) | PARTIAL | claim_completeness.py (COMPLETE/CONTEXT_ONLY/INCOMPLETE + reason/missing_slots) | tests/test_claim_completeness.py (11) | gate implemented behind V2; live acceptance P3-H/I | DATA-MODEL.md | 8668402 | dedup pipeline = P3-C | 3 |
-| CLAIM-003 | Cross-message claim dedup/merge (GATE-06) | PARTIAL | claim_compare.py (4-state pipeline) | tests/test_claim_dedup.py (15) | behind V2=false; live closure P3-H/I | DATA-MODEL.md | b9b1b2e | DONE waits live | 3 |
-| EVENT-001 | One real-world event grouping (multi-signal identity) | PARTIAL | event_fingerprint.py + matcher (3-way, hard conflicts, per-type continuation) | tests/test_event_matcher.py (12) | implemented+tested behind V2=false; live closure waits P3-H/I | DATA-MODEL.md | abfcf9d | — | 3 |
-| EVENT-002 | Same-event update edits same message (INV-012) | PARTIAL | ledger edit path exists | test_breaking_flow | msg 109→109 proven once | — | 9affb54 | not wired to new-claim-for-event flow | 3 |
-| EVENT-003 | Burst aggregation windows | PARTIAL | source_context.py + burst.py (SOURCE_CONTEXT_TTL_SECONDS / EVENT_BURST_WINDOW_SECONDS, semantic grouping ≠ time-only) | tests/test_source_context.py (12) + tests/test_burst.py (16) | schema 12 tables empty (dormant); behind V2=false until P3-E wiring | DATA-MODEL.md | 2d2851f | NOT_LIVE_YET; grouping never delays publication (breaking-safe by design) | 3 |
+| CLAIM-001 | Structured atomic claims | DONE | claim_model.py (StructuredClaim/ClaimClass/extractor + identity-label) | tests/test_claim_model.py (6) | LIVE: V2 creates structured claims (2257 total; 76+ in first V2 hour) | DATA-MODEL.md | ebb0589 | — | 3 |
+| CLAIM-002 | Claim completeness gate (GATE-03) | DONE | claim_completeness.py | tests/test_claim_completeness.py (11) | LIVE: fragments → CONTEXT_ONLY; 0 fragment stories/publications since cutover | DATA-MODEL.md | ebb0589 | — | 3 |
+| CLAIM-003 | Cross-message claim dedup/merge (GATE-06) | DONE | claim_compare.py (4-state, ratio-floor, fp-exact) | tests/test_claim_dedup.py (15) | LIVE in V2; shadow 24h paraphrase dup 0 | DATA-MODEL.md | ebb0589 | — | 3 |
+| EVENT-001 | One real-world event grouping (multi-signal identity) | DONE | event_fingerprint.py + claim-union candidates + cross-event guard | tests/test_event_matcher.py (12) | LIVE: shadow 218 items→127 events; live distinct-event sample (flydubai vs Hormuz tankers), over-merge 0 | DATA-MODEL.md | ebb0589 | — | 3 |
+| EVENT-002 | Same-event update edits same message (INV-012) | DONE | runner publish_send/publish_edit split + SEND_FORBIDDEN_EDIT_ONLY guard | tests/test_story_evolution.py (EDIT same remote id) + AST job-type guard | LIVE: guard active, duplicate-SEND violations 0; V1-era edit proof msg 109→109; first V2 natural EDIT accumulates as material updates arrive | PUBLISHING.md | ebb0589 | — | 3 |
+| EVENT-003 | Burst aggregation windows | DONE | source_context.py + burst.py (TTL 1800s / window 180s) | tests/test_source_context.py (12) + tests/test_burst.py (16) | LIVE in V2 path (burst groups forming); grouping never delays publication | DATA-MODEL.md | ebb0589 | — | 3 |
 | VERIFY-001 | Hard gates (high-risk single-source, conflict) | DONE | verification/gates.py | test_pipeline held cases | HELD=59 live | VERIFICATION.md | 69059ab | — | — |
 | VERIFY-002 | Independent-origin count (lineage) | DONE | lineage_key collapse | test_pipeline 5→1 | works | — | 69059ab | — | — |
 | VERIFY-003 | 5-min reverification incl HELD | DONE | reverification_loop ACTIVE_EVENT_STATUSES | test_autonomy.py | reverify hb fresh | — | 69059ab | — | — |
@@ -38,9 +38,9 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | EDIT-003 | Icon-only lifecycle, no «✅ تأیید شد» | DONE | STATUS_ICONS | test_language_gate | channel clean | EDITORIAL-STYLE | 69059ab | — | — |
 | GATE-11 | Source attribution exactly-once, fail-closed resolution | DONE | pipeline _render_public + source_display_names | tests/test_canonical_story.py (5 cases) | last-20 SENT: missing=0 dup=0 | — | afcc60f | — | 1 |
 | REG-026 | Docs/runtime mismatch governance | DONE | validator v3 + regression fixtures | tests/test_governance_regressions.py (7) | caught live PART-2 regression | — | PART2.1 | — | — |
-| GATE-03 | Claim completeness gate (class-aware slots) | PARTIAL | claim_completeness.py | tests/test_claim_completeness.py | behind V2=false | — | b7603bd | live closure P3-H/I | 3 |
-| GATE-06 | Claim comparison decision states | PARTIAL | claim_compare.compare | tests/test_claim_dedup.py | behind V2=false | — | b9b1b2e | DONE waits live | 3 |
-| GATE-05 | Three-way event match decision | PARTIAL | event_fingerprint.decide | tests/test_event_matcher.py | behind V2=false | — | abfcf9d | — | — |
+| GATE-03 | Claim completeness gate (class-aware slots) | DONE | claim_completeness.py | tests/test_claim_completeness.py | LIVE behind V2=true since ebb0589 | — | ebb0589 | — | 3 |
+| GATE-06 | Claim comparison decision states | DONE | claim_compare.compare | tests/test_claim_dedup.py | LIVE in V2; shadow clean | — | ebb0589 | — | 3 |
+| GATE-05 | Three-way event match decision | DONE | event_fingerprint.decide (real-data crash fixed via shadow) | tests/test_event_matcher.py | LIVE in V2 | — | ebb0589 | — | — |
 | EDIT-004 | Source attribution exactly once, names only | DONE | build_public_text source_names | tests | منبع in samples | — | 69059ab | — | — |
 | MEDIA-001 | sendPhoto/sendVideo + Persian caption | DONE | telegram_bot.send_media | test_media.py | msg 247 photo live | — | 9affb54 | — | 6 |
 | MEDIA-002 | Temp cache + cleanup + disk guard | DONE | media.py cleanup/publisher gates | test_media.py | cache=0 live | — | 9affb54 | — | 6 |
@@ -49,7 +49,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | MEDIA-005 | Media admin page | DONE | media_views.py | test_media page | /admin/media live | — | 9affb54 | — | 6 |
 | PUB-001 | Idempotent ledger (no dup posts) | DONE | publications UNIQUE + handler edit-path | test_publisher | retry=0 dup proven | PUBLISHING.md | 69059ab | — | — |
 | PUB-002 | Priority queue + freshness gate | DONE | migration 004 + STALE_SUPERSEDED | test_publisher | backlog contained | — | 69059ab | — | — |
-| PUB-003 | Importance floor (no low-value flood) | PARTIAL | classify_priority LOW floor | test suite | some low-value still published historically | — | 9affb54 | floor=20; tuning needed | 3 |
+| PUB-003 | Importance floor (no low-value flood) | DONE | classify_priority floor + V2 LOW_PUBLICATION_VALUE hold | test suite + live holds | LIVE: ENTERTAINMENT/sport events held since cutover (V2 log); low-value stored not published | — | ebb0589 | §27 audit script = follow-up tuning tool | 3 |
 | PLATFORM-001 | Telegram LIVE | DONE | telegram_bot.py | all pub tests | @RastehNews LIVE | — | 69059ab | — | — |
 | PLATFORM-002 | X/IG/Threads/FB adapters | BLOCKED_EXTERNAL | fanout.py placeholders | mock only | AUTH_REQUIRED/BLOCKED_BY_COST_POLICY truthful | — | 9affb54 | owner OAuth/keys | 8 |
 | PLATFORM-003 | Platform control panel | DONE | platforms.py + template | test_media page tests | /admin/platforms live | — | 69059ab | — | — |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | MISSING | — | — | — | — | 9affb54 | Part 10 | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 37 · PARTIAL 15 · BROKEN 0 · MISSING 6 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 44 · PARTIAL 8 · BROKEN 0 · MISSING 6 · BLOCKED_EXTERNAL 3 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)

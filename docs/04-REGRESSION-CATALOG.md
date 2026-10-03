@@ -30,16 +30,16 @@
 | REG-025 | branded card confused with original media | status labels | INV-024 | media-state labels (Part 6, CORE-006) | PARTIAL |
 | REG-026 | docs/runtime mismatch | stale docs / unverified claims; PART-2 sync reverted PART-1.1 evidence (CORE-002 blocker text) + stale Production SHA | INV-023/024 | tests/test_governance_regressions.py (7 fixtures: generic PART-PASS any part, BLOCKED_EXTERNAL semantics, SHA two-field rule, ambiguous-metric rejection, stale-blocker-on-DONE) | FIXED+TESTED (REGRESSED during PART-2 sync → reclosed @PART-2.1 with the exact regression fixture) |
 | REG-027 | PASS from tests w/o live evidence | reporting discipline | INV-023/024 | matrix runtime column | PARTIAL (matrix now enforces) |
-| REG-028 | same-event micro-post flood | every item → own event | INV-009/010 | burst-merge test | **OBSERVED (1020 events/2ch)** → Part 3 |
-| REG-029 | one interview → multiple posts | no claim clustering | INV-009 | interview-fixture test | PARTIAL — matcher behind V2 → live closure P3-D/E |
+| REG-028 | micro-post flood → story-per-post | title-keyed clustering | INV-013 | 6-fragment fixture (test_story_evolution) + shadow 218→50 stories | FIXED+LIVE (V2: 1 event/1 story per interview; live 2 stories from ~180 items in 36min) |
+| REG-029 | interview multi-post split | no continuation | §6 context types | context TTL inheritance tests | FIXED+LIVE (context/burst tables active in V2 path) |
 | REG-030 | source emoji/markup leaks | copy from source | EDIT spec | sanitizer emoji test | FIXED (emoji stripped in gate path) |
-| REG-031 | incomplete speaker prefix published | no completeness gate | INV-011/GATE-03 | WHO+WHAT test + tests/test_source_context.py (prefix-alone → 0 claim/event/story/pub) | **OBSERVED** («ترامپ به مجله تایم:» pattern) → Part 3 · context-inheritance portion IMPLEMENTED+TESTED behind V2 (P3-D; fragment rules unchanged) |
+| REG-031 | incomplete speaker prefix published | no completeness gate | INV-011/GATE-03 | prefix→0 publication tests + live: 0 fragment posts since cutover | FIXED+LIVE |
 | REG-032 | router exists, runtime never calls it | wiring partial | INV-017 | router-used test | PARTIAL (wired via settings._ai_router; no keys to prove live) → Part 5 |
 | REG-033 | runtime depends on agent | — | INV-021 | soak evidence | FIXED+TESTED (24/7 in-container) |
 | REG-034 | low-value crowds breaking | floor missing/loose | GATE-12 | floor tuning test | PARTIAL (floor=20 exists; observe) → Part 3 |
 | REG-035 | media cache threatens disk | no TTL/cap | INV-020 | cleanup/TTL tests | FIXED+TESTED |
-| REG-036 | new claim → new post instead of edit | edit not wired to merge flow | INV-012 | claim-merge→edit test | **OBSERVED** → Part 3 |
-| REG-037 | burst messages fail to aggregate | no window config | EVENT spec keys | tests/test_burst.py (16: semantic grouping, window≠continuation, boundary separation, idempotent replay) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — grouping info only; P3-E wires publication) |
-| REG-038 | same claim paraphrase → multiple stories | Jaccard-only dedup | INV-014 | tests/test_claim_dedup.py (safe-paraphrase SAME + 14 guards) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — closure P3-H/I) |
-| REG-039 | quote fragment without context | no completeness | GATE-03 | tests/test_source_context.py (12: inherit/TTL/speaker-reset/topic-reset/cross-source) | IMPLEMENTED+TESTED behind V2 (NOT_LIVE_YET — context store dormant until P3-E wiring) |
-| REG-040 | event identity changes with wording | title-keyed clustering | EVENT_IDENTITY | stable-identity test | OBSERVED → Part 3 |
+| REG-036 | new claim → new post instead of edit | edit not wired to merge flow | INV-012 | test_story_evolution EDIT-invariant + SEND_FORBIDDEN guard | FIXED+LIVE (runner guard live; duplicate-SEND violations 0; first natural EDIT pending) |
+| REG-037 | burst messages fail to aggregate | no window config | EVENT spec keys | tests/test_burst.py (16) | FIXED+LIVE (EVENT_BURST_WINDOW_SECONDS active in V2) |
+| REG-038 | same claim paraphrase → multiple stories | Jaccard-only dedup | INV-014 | tests/test_claim_dedup.py + cross-event fp-exact guard + shadow | FIXED+LIVE (shadow 24h paraphrase dup 0) |
+| REG-039 | quote fragment without context | no completeness | GATE-03 | tests/test_source_context.py (12) | FIXED+LIVE (per-source TTL context in V2 path) |
+| REG-040 | event identity changes with wording | title-keyed clustering | EVENT_IDENTITY | stable-identity tests + live distinct-event sample | FIXED+LIVE |

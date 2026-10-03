@@ -84,7 +84,7 @@ def test_asserted_sha_equality_without_verification_fails():
 def test_ambiguous_sent_wording_fails():
     for bad in ("Publication ledger SENT: 92 and 86 SENT mapped",
                 "total: SENT 89 today"):
-        d = mutated_docs(status_repl=("Publication ledger SENT: **197**", bad))
+        d = mutated_docs(status_repl=("SENT: **204**", bad))
         rc, out = validate(d)
         assert rc != 0, "must reject: %r" % bad
         assert "ambiguous metric" in out
