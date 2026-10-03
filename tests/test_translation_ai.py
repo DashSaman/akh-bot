@@ -177,10 +177,14 @@ def test_negation_reversal_rejected():
 
 
 def test_negation_participle_not_false_positive():
-    # qwen-style rewrite: negation via participle «نرفته» / prefix «غیر»
+    # qwen-style rewrite: negation via participle/past stem — «قرار نداد»،
+    # «نشانه نرفته»، prefix «غیر»
     assert consistency_issues(
         "قال مصدر إن الغارة لم تستهدف مدنيين",
-        "منبع نظامی: حمله مستقیماً به غیرنظامیان نشانه نرفته است") == []
+        "منبع نظامی: حمله هوایی به حومه بیروت مدنیان را هدف قرار نداد") == []
+    assert consistency_issues(
+        "قال مصدر إن الغارة لم تستهدف مدنيين",
+        "حمله مستقیماً به غیرنظامیان نشانه نرفته است") == []
 
 
 def test_certainty_escalation_rejected():

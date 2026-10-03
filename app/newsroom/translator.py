@@ -48,8 +48,9 @@ _CERTAIN_FA = ("قطعاً", "قطعا", "به‌طور قطعی", "به طور 
                "تأیید شد که", "مسلم")
 _CERTAIN_EN = ("definitely", "certainly", "confirmed that", "proven")
 _NEG_FA = ("نکرد", "نشد", "نیست", "نخواهد", "ندارد", "نمی", "بدون", "خلاف",
-           # negative participles/prefixes qwen-style Persian rewrites use
-           "نرفته", "نبود", "نگفت", "نداشت", "نخواست", "نگشت", "نیامد",
+           # negative past/participle stems qwen-style Persian rewrites use
+           "نداد", "نگرفت", "نرفت", "نبود", "نگفت", "نداشت", "نخواست",
+           "نگشت", "نیامد", "نتوانست",
            "غیر", "هیچ")
 _NEG_EN = ("not", "no ", "never", "without", "denied", "denies")
 _NEG_AR = ("لم ", "لن ", "لا ", "ليس", "بدون", "رفض")
