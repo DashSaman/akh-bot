@@ -47,6 +47,15 @@ sends now drip under the genuine daily cap (120/24h reached by real volume).
   auth; Kiro OAuth+IDE-only. provider_bench digit check now normalizes
   Persian/Arabic digits (cf/mistral-small + cohere/command-a actually PASS).
 
+## 2026-10-04 14:1xZ coverage follow-up (owner directives)
+- MAX_POSTS_PER_DAY 120->240 (.env; hourly 30 stays as burst guard) — the
+  trailing-24h window had genuinely filled with real posts and new sends
+  dripped one-by-one; queue now flushes normally (11 SENTs in 12 min).
+- Social policy (owner): publishing is TELEGRAM-ONLY. X account @rastehnews
+  exists and is logged in, but X API posting was declined by owner (Pay-Per-Use
+  cost risk); the auto-created X developer app has NO card attached, $0
+  balance, posts nothing. Threads/Facebook dropped.
+
 ## Pipeline hardening (2026-10-04 overnight, `a406f41`)
 - Translation thrash fix: 6 translations/pass budget + 5→60 min exponential backoff
   (held events no longer re-translate every ~3 min pass and starve the free tier).
