@@ -29,8 +29,9 @@ def _sent(db, story_id: int, when: datetime) -> int:
     pubs = PublicationsRepo(db)
     p = pubs.upsert(story_id, "telegram", f"h{_counter['n']}", 1)
     pubs.mark(p, "SENT", remote_id=str(100 + story_id))
-    db.execute("UPDATE publications SET updated_at=? WHERE id=?",
-               (when.isoformat(timespec="seconds"), p))
+    db.execute("UPDATE publications SET created_at=?, updated_at=? WHERE id=?",
+               (when.isoformat(timespec="seconds"),
+                when.isoformat(timespec="seconds"), p))
     return p
 
 
@@ -59,3 +60,22 @@ def test_new_posts_since_window_scoping(db):
     pubs = PublicationsRepo(db)
     assert pubs.new_posts_since(now - timedelta(hours=24)) == 2
     assert pubs.new_posts_since(now - timedelta(hours=1)) == 1
+
+
+def test_new_posts_since_ignores_inplace_updated_at_refresh(db):
+    """Production edits UPDATE the single SENT row (no new row is inserted).
+
+    new_posts_since filtered on updated_at, so every lifecycle edit re-counted
+    an old story as a fresh post — with edits arriving continuously the hourly
+    count never fell below the cap and every publish_send stayed THROTTLED
+    forever (2026-10-04 13:03Z silence). The first-send row's created_at is
+    immutable, so caps must filter on it.
+    """
+    now = datetime.now(timezone.utc)
+    # one SENT row created 10h ago, edited (updated_at refreshed) right now
+    p = _sent(db, 10, now - timedelta(hours=10))
+    db.execute("UPDATE publications SET updated_at=? WHERE id=?",
+               (now.isoformat(timespec="seconds"), p))
+    pubs = PublicationsRepo(db)
+    assert pubs.new_posts_since(now - timedelta(hours=1)) == 0
+    assert pubs.new_posts_since(now - timedelta(hours=24)) == 1

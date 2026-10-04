@@ -8,6 +8,14 @@
 ## Runtime snapshot
 - Publication ledger SENT: **322** (telegram remote-mapped; duplicate-SEND violations 0)
 
+## 2026-10-04 13:03Z silence incident — RESOLVED (cap deadlock, 5th cause)
+Morning fix new_posts_since() still filtered on updated_at: lifecycle edits
+UPDATE the single SENT row in place (no new row), so continuous edits kept the
+hourly count >= cap forever — every publish_send THROTTLED, channel silent
+13:03-13:53. Fix: filter on created_at (immutable enqueue moment). Verified
+live: story 1295 SENT remote_id=491 at 13:53:11; watchdog stall self-cleared;
+sends now drip under the genuine daily cap (120/24h reached by real volume).
+
 ## 2026-10-04 no-news incident — RESOLVED (4 stacked causes)
 1. **Edits consumed post caps** (`38c7e16`): lifecycle edits refresh a SENT row's
    updated_at; the hourly/daily caps counted them, pushed sent_24h to

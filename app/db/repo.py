@@ -451,13 +451,17 @@ class PublicationsRepo:
         return int(row["c"]) if row else 0
 
     def new_posts_since(self, since: datetime) -> int:
-        """First sends only (NEW channel messages). Lifecycle EDITS also mark
-        a publication SENT with a refreshed updated_at, but an edit adds no
-        channel message — counting edits burned the daily post cap and
-        starved real publications (2026-10-04 no-news incident)."""
+        """First sends only (NEW channel messages), keyed on created_at.
+
+        A lifecycle edit refreshes the SAME row's updated_at (no new row, no
+        channel message). Filtering on updated_at let continuous edits hold
+        the hourly count above the cap forever — every publish_send stayed
+        THROTTLED and the channel went silent (2026-10-04 13:03Z incident).
+        created_at is the enqueue moment of a story's first send and is never
+        refreshed, so it counts each story's channel debut exactly once."""
         row = self.db.query_one(
             "SELECT COUNT(*) AS c FROM publications p WHERE p.status='SENT' "
-            "AND p.updated_at>=? AND NOT EXISTS ("
+            "AND p.created_at>=? AND NOT EXISTS ("
             "  SELECT 1 FROM publications q WHERE q.story_id=p.story_id "
             "  AND q.status='SENT' AND q.id<p.id)",
             (since.isoformat(timespec="seconds"),),
