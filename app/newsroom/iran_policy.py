@@ -1,10 +1,19 @@
 """Iran-first editorial policy: capacity allocation + crisis mode.
 
-90% is an editorial ALLOCATION TARGET when enough valid Iran-related stories
-exist — never fabricated, never a rigid per-hour arithmetic. Spare capacity
-spills to regional/global news automatically. IRAN_CRISIS_MODE concentrates
-speed and capacity further but NEVER weakens verification (priority is order,
-not trust — same invariant as source speed priority).
+~90% Iran-related allocation WHEN enough valid Iran-related supply exists —
+never manufactured filler; unused capacity spills to regional/global news
+automatically. Classification requires a MATERIAL relation to Iran (people,
+government/security/military, IRGC, Israel/US ties, nuclear/IAEA, sanctions,
+negotiations, threats either direction, Hormuz/Persian Gulf, economy/
+currency, internet restrictions, Iran-adjacent escalation) — not a random
+keyword coincidence.
+
+IRAN_CRISIS_MODE state machine (FINAL-HARDENING §3):
+  INACTIVE --(>= threshold fresh triggers)--> ACTIVE (until = now + calm)
+  ACTIVE   --(new trigger)-------------------> extend until = now + calm
+  ACTIVE   --(no trigger, now < until)-------> REMAIN ACTIVE (never early-exit)
+  ACTIVE   --(no trigger, now >= until)------> INACTIVE
+Verification rules NEVER change in crisis (priority is order, not trust).
 """
 from __future__ import annotations
 
@@ -12,24 +21,46 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-IRAN_SHARE_TARGET = 0.70   # rolling-6h floor before P2/P3 deferral kicks in
-IRAN_SHARE_CRISIS = 0.90   # allocation target while crisis mode is active
+IRAN_SHARE_TARGET = 0.90   # owner policy: ~90% when sufficient valid supply
 CRISIS_KEY = "IRAN_CRISIS_MODE"
-CRISIS_TRIGGER_EVENTS = 2  # distinct-source P0 war events in the window
+CRISIS_TRIGGER_EVENTS = 2  # distinct P0 Iran events inside the window
 CRISIS_WINDOW_MIN = 30
 
-_IRAN_MARKERS = (
+# Material-relation markers: multiword phrases and Iran-specific terms.
+# Generic words alone (اینترنت، gold, war…) must NOT classify world news.
+_IRAN_PHRASES = (
     "ایران", "تهران", "اصفهان", "مشهد", "تبریز", "شیراز", "اهواز", "کرمان",
-    "قم", "یران", "persian gulf", "hormuz", "tehran", "iran", "irani",
-    "irgc", "sepah", "بسیج", "آیت", "خامنه", "peacock",
-    "تومان", "ریال", "فیلترینگ", "اینترنت", "سپاه", "ARD", "سنجاقک",
-    "بوشهر", "نطنز", "فردو", "اراک", "IAEA", "آژانس", "تحریم",
+    "قم", "کرج", "رشت", "زاهدان", "بندرعباس", "خلیج فارس", "تنگه هرمز",
+    "هرمز", "آبادان", "بوشهر", "نطنز", "فردو", "اراک", "خوزستان",
+    "سپاه پاسداران", "سپاه", "قدس", "بسیج", "irgc",
+    "آیت الله", "رهبر انقلاب", "مجلس شورای اسلامی", "قوه قضائیه",
+    "رئیس جمهور ایران", "وزیر خارجه ایران", "دیپلمات ایران",
+    "تحریم", "sanction", "sanctions",
+    "تومان", "ریال", "دلار تهران", "بورس تهران",
+    "فیلترینگ", "شبکه ملی اطلاعات",
+    "irna", "irib", "persian gulf", "hormuz", "strait of hormuz",
+    "irani", "iranian", "iran", "tehran", "qom", "mashhad",
+    "iaea", "آژانس بین المللی انرژی اتمی", "آژانس",
+    "انرژی اتمی ایران", "برنامه هسته‌ای", "هسته‌ای", "غنی‌سازی",
 )
+# words that look Iran-ish but alone mean generic world news → require combo
+_GENERIC_BLOCKERS = ("فوتبال", "سینما", "سلبریتی", "باشگاه", "لیگ قهرمانان",
+                     "جام جهانی", "المپیک", "olympic", "celebrity", "league",
+                     "cup final", "box office")
 
 
 def is_iran_related(text: str) -> bool:
+    """Material relation to Iran — with a sports/entertainment negative
+    control so routine filler never masquerades as Iran priority."""
     t = (text or "").lower()
-    return any(m.lower() in t for m in _IRAN_MARKERS)
+    if not t:
+        return False
+    if any(b in t for b in _GENERIC_BLOCKERS):
+        # "فوتبال ایران" IS Iran-related; pure generic filler is not
+        has_core = any(m in t for m in ("ایران", "تهران", "iran", "irani"))
+        if not has_core:
+            return False
+    return any(m in t for m in _IRAN_PHRASES)
 
 
 def iran_waiting_count(db) -> int:
@@ -60,8 +91,8 @@ def defer_for_iran_capacity(db, headline: str, weight: int) -> bool:
     """SOFT allocation: a P2/P3 story waits one pass when the rolling Iran
     share is under target AND Iran supply genuinely exists. Never defers
     when Iran supply is empty (capacity spills automatically) and never
-    touches P0/P1."""
-    if weight >= 75:  # P0/P1 always pass
+    touches P0/P1 breaking."""
+    if weight >= 75:  # P0/P1 breaking never waits behind P2/P3 backlog
         return False
     if iran_share_6h(db) >= IRAN_SHARE_TARGET:
         return False
@@ -69,16 +100,16 @@ def defer_for_iran_capacity(db, headline: str, weight: int) -> bool:
 
 
 # ---------------------------------------------------------------- crisis mode
-def update_crisis_mode(db, *, calm_minutes: int = 60) -> dict[str, Any]:
-    """Auto-trigger/extend/expire IRAN_CRISIS_MODE on strong evidence.
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-    Trigger: >=2 distinct-source P0 war/security events about Iran inside the
-    window. While active, fresh triggers extend it; it expires after the calm
-    period with NO manual restart. Verification is never weakened — crisis
-    only concentrates speed/capacity.
-    """
+
+def update_crisis_mode(db, *, calm_minutes: int = 60) -> dict[str, Any]:
+    """Correct state machine — see module docstring. Never exits before
+    `until` actually expires, regardless of fresh-trigger dips."""
     from app.db.repo import SettingsRepo
     now = datetime.now(timezone.utc)
+    now_iso = now.isoformat(timespec="seconds")
     state: dict[str, Any] = {}
     raw = SettingsRepo(db).get(CRISIS_KEY) or ""
     if raw:
@@ -86,30 +117,37 @@ def update_crisis_mode(db, *, calm_minutes: int = 60) -> dict[str, Any]:
             state = json.loads(raw)
         except (ValueError, TypeError):
             state = {}
-    since = (now - timedelta(minutes=CRISIS_WINDOW_MIN)) \
+    until = str(state.get("until") or "")
+    was_active = bool(state.get("active"))
+
+    n = _fresh_trigger_count(db)
+    if n >= CRISIS_TRIGGER_EVENTS:
+        state = {"active": True,
+                 "since": state.get("since") if was_active else now_iso,
+                 "until": (now + timedelta(minutes=calm_minutes))
+                 .isoformat(timespec="seconds"),
+                 "triggers": n}
+    elif was_active:
+        if now_iso >= until:  # calm interval ACTUALLY elapsed
+            state["active"] = False
+            state["exited_at"] = now_iso
+        # else: REMAIN ACTIVE — no early exit, no manual restart needed
+    # else: was inactive and no trigger — stays inactive
+    SettingsRepo(db).set(CRISIS_KEY, json.dumps(state, ensure_ascii=False))
+    return state
+
+
+def _fresh_trigger_count(db) -> int:
+    since = (datetime.now(timezone.utc)
+             - timedelta(minutes=CRISIS_WINDOW_MIN)) \
         .isoformat(timespec="seconds")
-    triggers = db.query(
+    rows = db.query(
         "SELECT DISTINCT st.event_id FROM stories st"
         " JOIN events e ON e.id = st.event_id"
         " WHERE st.created_at >= ? AND (e.importance >= 90 OR e.velocity >= 90)"
         "   AND (st.headline LIKE '%ایران%' OR st.headline LIKE '%تهران%'"
         "        OR st.headline LIKE '%Iran%')", (since,))
-    n = len({t["event_id"] for t in triggers})
-    active = bool(state.get("active")) and str(state.get("until", "")) > \
-        now.isoformat(timespec="seconds")
-    if n >= CRISIS_TRIGGER_EVENTS:
-        until = (now + timedelta(minutes=calm_minutes)) \
-            .isoformat(timespec="seconds")
-        state = {"active": True, "since": state.get("since") if active
-                 else now.isoformat(timespec="seconds"), "until": until,
-                 "triggers": n}
-    elif active:
-        state["active"] = False  # calm period elapsed -> auto-exit
-        state["exited_at"] = now.isoformat(timespec="seconds")
-    else:
-        state.setdefault("active", False)
-    SettingsRepo(db).set(CRISIS_KEY, json.dumps(state, ensure_ascii=False))
-    return state
+    return len({r["event_id"] for r in rows})
 
 
 def crisis_active(db) -> bool:
@@ -123,5 +161,4 @@ def crisis_active(db) -> bool:
         return False
     if not state.get("active"):
         return False
-    return str(state.get("until", "")) > \
-        datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return str(state.get("until", "")) > _now_iso()

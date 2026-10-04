@@ -155,6 +155,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_router)
     app.include_router(platforms_router)
     app.include_router(media_router)
+    from app.admin.bot_admins import router as bot_admins_router
+    from app.admin.editorial_inbox import router as editorial_inbox_router
+    app.include_router(bot_admins_router)
+    app.include_router(editorial_inbox_router)
     from app.web.routes import router as web_router
 
     app.include_router(web_router)

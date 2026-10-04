@@ -154,7 +154,9 @@ def test_rate_cap_throttles_not_fails(db, settings):
     # see INCIDENT-2026-10-04 regression in tests/test_rate_cap_edits.py)
     now = datetime.now(timezone.utc)
     base_story = db.query_one("SELECT MAX(id) AS m FROM stories")["m"]
-    for i in range(12):
+    # FINAL-HARDENING: saturate whatever the configured hourly ceiling is
+    # (60/hour since 2026-10-04) — count follows the setting, not a constant
+    for i in range(int(s.max_posts_per_hour)):
         db.execute(
             "INSERT INTO events(title, status, first_seen_at, last_seen_at)"
             " VALUES ('رخداد', 'PUBLISHED', '2026-10-03T10:00:00+00:00', '2026-10-03T10:00:00+00:00')")

@@ -1,0 +1,49 @@
+{% extends "admin/base.html" %}
+{% block title %}مدیران ربات{% endblock %}
+{% block content %}
+<h1>مدیران ربات تحریریه <span class="small">— احراز با شناسه عددی تلگرام</span></h1>
+
+<form method="post" action="/admin/bot-admins/add" class="row">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input name="telegram_user_id" placeholder="شناسه عددی" required>
+  <input name="display_name" placeholder="نام نمایشی">
+  <select name="role">
+    {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+  </select>
+  <button type="submit">افزودن</button>
+</form>
+
+<table>
+  <tr><th>شناسه</th><th>نام</th><th>نقش</th><th>فعال</th>
+      {% for p in perms %}<th>{{ p }}</th>{% endfor %}<th>عملیات</th></tr>
+{% for a in admins %}
+  <tr>
+    <form method="post" action="/admin/bot-admins/{{ a.id }}/update">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <td><code>{{ a.telegram_user_id }}</code></td>
+    <td>{{ a.display_name }}</td>
+    <td>
+      {% if a.role == 'OWNER' %}<b>OWNER</b>
+      {% else %}<select name="role">
+        <option value="{{ a.role }}" selected>{{ a.role }}</option>
+        {% for r in roles %}{% if r != a.role and r != 'OWNER' %}
+          <option value="{{ r }}">{{ r }}</option>{% endif %}{% endfor %}
+      </select>{% endif %}
+    </td>
+    <td>{{ '✅' if a.enabled else '⛔' }}</td>
+    {% for p in perms %}<td>
+      {% if a.role == 'OWNER' %}{{ '✅' if a[p] else '—' }}
+      {% else %}<input type="checkbox" name="{{ p }}" {{ 'checked' if a[p] }}>{% endif %}
+    </td>{% endfor %}
+    <td>
+      {% if a.role != 'OWNER' %}
+        {% if a.enabled %}<button name="action" value="disable">غیرفعال</button>
+        {% else %}<button name="action" value="enable">فعال</button>{% endif %}
+        <button name="action" value="save">ذخیره</button>
+      {% else %}<span class="small">immutable</span>{% endif %}
+    </td>
+    </form>
+  </tr>
+{% endfor %}
+</table>
+{% endblock %}

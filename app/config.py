@@ -35,8 +35,8 @@ class Settings(BaseSettings):
     iran_crisis_calm_minutes: int = 60       # A4: auto-exit after calm
     telegram_news_chat_id: str = ""      # legacy alias → publish (being retired)
 
-    max_provisional_posts_per_hour: int = 6
-    max_confirmed_posts_per_hour: int = 12
+    max_provisional_posts_per_hour: int = 45
+    max_confirmed_posts_per_hour: int = 60
     min_breaking_importance: int = 60
     standard_max_age_minutes: int = 180
     breaking_max_age_minutes: int = 720    # 0..100; below → no provisional publication
@@ -71,8 +71,8 @@ class Settings(BaseSettings):
     # retries instead of freezing the whole jobs loop (2026-10-04 incident)
     job_handler_timeout_seconds: int = 180
 
-    max_posts_per_hour: int = 12
-    max_posts_per_day: int = 120
+    max_posts_per_hour: int = 60
+    max_posts_per_day: int = 500
     max_llm_calls_per_minute: int = 30
     max_llm_calls_per_hour: int = 500
 

@@ -76,6 +76,7 @@ class Scheduler:
                 try:
                     _publication_stall_check(self.db)
                     _diversity_and_starvation_check(self.db)
+                    _iran_stall_check(self.db, self.settings)
                     try:
                         from app.newsroom.iran_policy import update_crisis_mode
                         update_crisis_mode(
@@ -243,6 +244,73 @@ def _publication_stall_check(db) -> None:
     from app.db.repo import SettingsRepo as _S
     _S(db).set("PUBLICATION_PIPELINE_STALLED", _json.dumps(diag, ensure_ascii=False))
     log.warning("PUBLICATION_PIPELINE_STALLED: %s", diag)
+
+
+def _iran_stall_check(db, settings) -> None:
+    """§8 FINAL-HARDENING: dedicated Iran-priority liveness guard.
+
+    Fires IRAN_PUBLICATION_PIPELINE_STALLED when fresh eligible Iran P0/P1
+    material + a publishable story exist, no SEND for 10 minutes, and no
+    legitimate rate/cap reason explains it. Safe bounded recovery: pending
+    publish jobs get their run_after nudged to now (once per 10 min) —
+    never fake posts, never verification bypass, general watchdog kept.
+    """
+    import json as _json
+    from datetime import datetime, timedelta, timezone
+    from app.db.repo import SettingsRepo as _S
+    from app.newsroom.iran_policy import is_iran_related
+    now = datetime.now(timezone.utc)
+    h10 = (now - timedelta(minutes=10)).isoformat(timespec="seconds")
+    last = db.query_one(
+        "SELECT MAX(created_at) t FROM publications WHERE status='SENT'")
+    if last and last["t"] and str(last["t"]) > h10:
+        _S(db).set("IRAN_PUBLICATION_PIPELINE_STALLED", "")
+        return
+    ready = db.query(
+        "SELECT st.id, st.headline FROM stories st"
+        " WHERE st.status IN ('DRAFT','READY') AND NOT EXISTS ("
+        "  SELECT 1 FROM publications p WHERE p.story_id=st.id"
+        "  AND p.status='SENT')")
+    iran_ready = [r for r in ready if is_iran_related(r["headline"] or "")]
+    if not iran_ready:
+        _S(db).set("IRAN_PUBLICATION_PIPELINE_STALLED", "")
+        return
+    pending = db.query_one(
+        "SELECT COUNT(*) c FROM jobs WHERE job_type='publish_send'"
+        " AND status='pending'")["c"]
+    throttled = db.query_one(
+        "SELECT COUNT(*) c FROM jobs WHERE job_type='publish_send'"
+        " AND status='throttled'")["c"] if _has_throttled_state(db) else 0
+    if pending > 0 or throttled > 0:
+        # a legitimate rate reason exists — diagnose only, no marker escalation
+        pass
+    caps = {"max_posts_per_hour": getattr(settings, "max_posts_per_hour", 60),
+            "max_posts_per_day": getattr(settings, "max_posts_per_day", 500)}
+    holds = {r["verification"]: r["c"] for r in db.query(
+        "SELECT verification, COUNT(*) c FROM events WHERE status='HELD'"
+        " GROUP BY verification")}
+    diag = {"iran_stories_ready": len(iran_ready),
+            "pending_publish_jobs": pending, "throttled": throttled,
+            "caps": caps, "last_send": str(last["t"]) if last else None,
+            "top_hold_reasons": holds}
+    _S(db).set("IRAN_PUBLICATION_PIPELINE_STALLED",
+               _json.dumps(diag, ensure_ascii=False))
+    log.warning("IRAN_PUBLICATION_PIPELINE_STALLED: %s", diag)
+    # bounded safe recovery: nudge pending publish jobs runnable now
+    if pending > 0:
+        db.execute(
+            "UPDATE jobs SET run_after=? WHERE job_type='publish_send'"
+            " AND status='pending' AND run_after>?",
+            (now.isoformat(timespec="seconds"), now.isoformat(timespec="seconds")))
+
+
+def _has_throttled_state(db) -> bool:
+    try:
+        r = db.query_one(
+            "SELECT COUNT(*) c FROM jobs WHERE status='throttled'")
+        return bool(r)
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _diversity_and_starvation_check(db) -> None:

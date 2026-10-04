@@ -28,10 +28,66 @@ MANUAL_IDENTITY = "ManualEditorial"
 _OFFSET_KEY = "telegram_intake_offset"
 _DENY_TEXT = "⛔ شما مجاز به ارسال خبر به راسته نیستید."
 _PENDING_EDIT: dict[str, tuple[float, int]] = {}  # chat_id -> (ts, submission_id)
+_ALBUM_TASKS: dict[str, Any] = {}                  # group -> debounce task
+_ALBUM_DEBOUNCE_S = 2.0                            # quiet window per album
+
+
+async def _album_debounce(db, api, group: str) -> None:
+    await asyncio.sleep(_ALBUM_DEBOUNCE_S)
+    await _album_finalize(db, api, group)
+
+
+async def _album_finalize(db, api, group: str) -> None:
+    """Runs ALBUM_DEBOUNCE_S after the LAST album item: sends the single
+    preview for the whole media group (order preserved in raw_items)."""
+    _ALBUM_TASKS.pop(group, None)
+    row = db.query_one(
+        "SELECT s.* FROM manual_submissions s"
+        " WHERE s.telegram_media_group_id=? ORDER BY s.id DESC LIMIT 1",
+        (group,))
+    if not row or row["status"] != "RECEIVED":
+        return  # already finalized / cancelled
+    db.execute("UPDATE manual_submissions SET status='PREVIEW' WHERE id=?",
+               (row["id"],))
+    item = db.query_one("SELECT title, forward_from, media_json FROM raw_items"
+                        " WHERE id=?", (row["raw_item_id"],))
+    try:
+        refs = json.loads(item["media_json"] or "[]")
+    except (ValueError, TypeError):
+        refs = []
+    await _send_preview_via(api, row["telegram_chat_id"], row["id"],
+                            item["title"] or "آلبوم رسانه‌ای",
+                            item["forward_from"] or "آلبوم", refs)
+
+
+async def _send_preview_via(api, chat_id: str, sid: int, title: str,
+                            origin: str, refs: list) -> None:
+    kb = {"inline_keyboard": [[
+        {"text": "🚀 انتشار", "callback_data": f"cb:{sid}:publish"},
+        {"text": "🔎 بررسی و انتشار", "callback_data": f"cb:{sid}:review"},
+    ], [
+        {"text": "✏️ ویرایش", "callback_data": f"cb:{sid}:edit"},
+        {"text": "❌ لغو", "callback_data": f"cb:{sid}:cancel"},
+    ]]}
+    media_note = (f"\n📎 رسانه: {len(refs)} فایل (file_id — بدون ذخیره دائمی)"
+                  if refs else "")
+    res = await api("sendMessage", {
+        "chat_id": chat_id,
+        "text": (f"📰 پیش‌نمایش راسته\n\n{title}\n\n"
+                 f"منبع: {origin}\nوضعیت: در انتظار تأیید تحریریه{media_note}"),
+        "reply_markup": kb})
+    if res and res.get("ok"):
+        pmid = res.get("result", {}).get("message_id")
+        db_exec = _DB_EXEC_HOLDER[0]
+        db_exec("UPDATE manual_submissions SET preview_message_id=? WHERE id=?",
+                (str(pmid), sid))
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+_DB_EXEC_HOLDER: list = [None]  # bound at worker start for finalize helpers
 
 
 class EditorialIntake:
@@ -40,6 +96,7 @@ class EditorialIntake:
     def __init__(self, db, settings) -> None:
         self.db = db
         self.settings = settings
+        _DB_EXEC_HOLDER[0] = db.execute
         self._base = f"https://api.telegram.org/bot{settings.telegram_bot_token}"
 
     # ------------------------------------------------------------- telegram
@@ -256,10 +313,11 @@ class EditorialIntake:
             return
         title = (text.splitlines()[0][:140] if text else
                  (f"‎رسانه فوروارد‌شده از {origin}")[:140])
-        # album continuation: append media to the group's raw item
+        # album: one RawItem for the whole group; preview only after the
+        # debounce window is quiet (§6) — order preserved, no fragments.
         if group:
             row = self.db.query_one(
-                "SELECT s.raw_item_id rid FROM manual_submissions s"
+                "SELECT s.raw_item_id rid, s.status st FROM manual_submissions s"
                 " WHERE s.telegram_media_group_id=? ORDER BY s.id DESC LIMIT 1",
                 (group,))
             if row and row["rid"]:
@@ -270,11 +328,18 @@ class EditorialIntake:
                 except (ValueError, TypeError):
                     media = []
                 media.extend(refs)
+                if text:
+                    self.db.execute("UPDATE raw_items SET text=?, title=?"
+                                    " WHERE id=?",
+                                    (text, title, row["rid"]))
                 self.db.execute("UPDATE raw_items SET media_json=? WHERE id=?",
                                 (json.dumps(media, ensure_ascii=False),
                                  row["rid"]))
-                await self._api("sendMessage", {"chat_id": chat_id,
-                    "text": "➕ رسانه به همان آلبوم افزوده شد."})
+                task = _ALBUM_TASKS.get(group)
+                if task and not task.done():
+                    task.cancel()
+                _ALBUM_TASKS[group] = asyncio.get_running_loop().create_task(
+                    _album_debounce(self.db, self._api, group))
                 return
         lang = "fa" if any("\u0600" <= c <= "\u06FF" for c in text) else "und"
         self.db.execute(
@@ -291,9 +356,16 @@ class EditorialIntake:
             "INSERT INTO manual_submissions (submitter_admin_id,"
             " telegram_chat_id, telegram_message_id, telegram_media_group_id,"
             " forwarded_origin, raw_item_id, status, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, 'PREVIEW', ?)",
+            " VALUES (?, ?, ?, ?, ?, ?, 'RECEIVED', ?)",
             (admin["id"], chat_id, mid, group, origin, rid, _now()))
         sid = self.db.query_one("SELECT MAX(id) id FROM manual_submissions")["id"]
+        if group:
+            # first fragment: leave RECEIVED; the debounce finalizer previews
+            _ALBUM_TASKS[group] = asyncio.get_running_loop().create_task(
+                _album_debounce(self.db, self._api, group))
+            return
+        self.db.execute("UPDATE manual_submissions SET status='PREVIEW'"
+                        " WHERE id=?", (sid,))
         await self._send_preview(chat_id, sid, title, origin, refs, admin)
 
     async def _send_preview(self, chat_id: str, sid: int, title: str,
@@ -346,6 +418,10 @@ class EditorialIntake:
                 "text": "🚀 وارد خط تولید استاندارد شد (دداپ/رویداد/تأیید/"
                         "انتشار همان مسیر خودکار)."})
         elif action == "edit":
+            if not self._can(admin, "can_edit"):
+                await self._api("sendMessage", {"chat_id": chat_id,
+                    "text": "⛔ مجوز ویرایش ندارید."})
+                return
             _PENDING_EDIT[chat_id] = (datetime.now(timezone.utc).timestamp(), sid)
             await self._api("sendMessage", {"chat_id": chat_id,
                 "text": "✏️ متن اصلاح‌شده را همین‌جا بفرستید (تا ۵ دقیقه)."})

@@ -3,7 +3,8 @@
 config/brand.yml
 *.session
 *.session-journal
-data/
+data/*
+!data/source_registry_endpoints.json
 *.db
 *.db-wal
 *.db-shm
