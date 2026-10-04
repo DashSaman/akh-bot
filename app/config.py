@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     ingest_interval_seconds: int = 300
     pipeline_interval_seconds: int = 60
     jobs_interval_seconds: int = 10
+    # STALL-RECOVERY: bounds every job handler so a hung network call
+    # retries instead of freezing the whole jobs loop (2026-10-04 incident)
+    job_handler_timeout_seconds: int = 180
 
     max_posts_per_hour: int = 12
     max_posts_per_day: int = 120

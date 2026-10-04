@@ -46,7 +46,13 @@ class JobRunner:
                 if handler is None:
                     raise RuntimeError(f"no handler for {job['job_type']}")
                 try:
-                    ok = await handler(payload)
+                    # STALL-RECOVERY (2026-10-04 incident): a hung network
+                    # call inside a handler froze the whole jobs loop for
+                    # hours. Every handler is bounded; a timeout counts as a
+                    # normal failure retry, never a loop freeze.
+                    ok = await asyncio.wait_for(
+                        handler(payload),
+                        timeout=float(getattr(self.settings, "job_handler_timeout_seconds", 180)))
                 except Throttled as th:
                     from datetime import timedelta as _td
                     self.jobs.reschedule(
@@ -55,6 +61,10 @@ class JobRunner:
                     log.info("job %s THROTTLED (rate cap) — rescheduled", job["id"],
                              extra={"job_id": job["id"]})
                     continue
+                except asyncio.TimeoutError:
+                    raise RuntimeError(
+                        f"handler timeout after "
+                        f"{getattr(self.settings, 'job_handler_timeout_seconds', 180)}s")
                 outcome = self.jobs.finish(job["id"], bool(ok), None if ok else "handler reported failure")
             except Exception as e:  # noqa: BLE001 — job errors are data, not crashes
                 log.warning("job %s failed: %s", job["id"], e, extra={"job_id": job["id"]})
