@@ -2,8 +2,8 @@
 
 One current truth. Historical incident notes live in git history, not here.
 
-- **Repository HEAD:** 342855c
-- **Production runtime SHA:** 342855c (audit deploy 2026-10-04T16:5xZ; effective caps 500/60/45; CI green; 3 natural post-audit SENDs observed 16:21Z)
+- **Repository HEAD:** 3a24426
+- **Production runtime SHA:** 3a24426 (quality-gates deploy 2026-10-04T16:4xZ; healthy; CI green)
   deploys after clean-checkout + CI green)
 - **Governance:** PASS — tally: 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
 - **Parts:** PART 1 = PASS - PART 2 = BLOCKED_EXTERNAL - PART 3 = PASS - PART 4 = PASS - PART 5 = PASS - PART 6 = PASS - PART 7 = PASS - PART 8 = BLOCKED_EXTERNAL - PART 9 = PASS - PART 10 = PASS
