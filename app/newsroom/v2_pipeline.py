@@ -42,8 +42,7 @@ from app.newsroom.source_context import resolve_context
 from app.newsroom.story_evolution import build_v2_content, render_v2_public_text
 from app.newsroom.translator import needs_translation_for, translate_event_sync
 from app.publishing.telegram_bot import is_persian_public_text
-from app.verification.gates import (
-    classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk,
+from app.verification.gates import (    classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk,
 )
 
 log = logging.getLogger("akh.pipeline.v2")
@@ -51,6 +50,40 @@ log = logging.getLogger("akh.pipeline.v2")
 # matcher candidate scan is bounded (§39): never O(all-history)
 _CANDIDATE_LIMIT = 20
 _MAX_CONTINUATION_MIN = max(CONTINUATION_MINUTES.values())
+
+# THRASH-FIX: max fresh translations per pipeline pass — keeps a saturated
+# free-tier AI pool from being burned on retry loops (backoff column below).
+_TRANSLATE_BUDGET_PER_PASS = 6
+
+
+def _translation_gate(db, event_id: int, summary: dict) -> str | None:
+    """THRASH-FIX gate: 'budget' (pass cap hit), 'backoff' (retry window),
+    or None (translation may proceed now)."""
+    now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
+    row = db.execute("SELECT translate_attempts a, next_translate_at n FROM events WHERE id=?",
+                     (event_id,)).fetchone()
+    next_at = (row["n"] or "") if row else ""
+    if summary.get("translations", 0) >= _TRANSLATE_BUDGET_PER_PASS:
+        return "budget"
+    if next_at and next_at > now_iso:
+        return "backoff"
+    return None
+
+
+def _record_translation_outcome(db, event_id: int, ok: bool) -> None:
+    """On failure: exponential backoff 5→10→…→60min. On success: reset."""
+    if ok:
+        db.execute("UPDATE events SET translate_attempts=0, next_translate_at='' WHERE id=?",
+                   (event_id,))
+        return
+    row = db.execute("SELECT translate_attempts a FROM events WHERE id=?",
+                     (event_id,)).fetchone()
+    attempts = int(row["a"] or 0) if row else 0
+    backoff_s = min(300 * (2 ** attempts), 3600)
+    nxt = (datetime.utcnow() + timedelta(seconds=backoff_s)).strftime("%Y-%m-%dT%H:%M:%S")
+    db.execute("UPDATE events SET translate_attempts=?, next_translate_at=? WHERE id=?",
+               (attempts + 1, nxt, event_id))
+    return
 
 
 def _occurred_at(item: dict) -> str:
@@ -488,12 +521,22 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
         foreign_lang = _event_source_language(db, event["id"])
     evidence = content["headline"] + "\n" + "\n".join(content["details"])
     if needs_translation_for(foreign_lang, evidence):
-        translated = _translate_event_content(db, settings, event,
-                                              foreign_lang, evidence)
+        # THRASH-FIX: per-pass budget + exponential backoff so a saturated
+        # free-tier AI pool is spent on NEW translations instead of retrying
+        # the same held events every pass (~3min) forever.
+        gate = _translation_gate(db, event["id"], summary)
+        if gate is None:
+            translated = _translate_event_content(db, settings, event,
+                                                  foreign_lang, evidence)
+            summary["translations"] = summary.get("translations", 0) + 1
+            _record_translation_outcome(db, event["id"], translated is not None)
+        else:
+            translated = None
         if translated is None:
             EventsRepo(db).set_status(event["id"], "HELD")  # NEEDS_LANGUAGE_PROCESSING
-            log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (lang=%s)",
-                     event["id"], foreign_lang or "heuristic")
+            if gate is None:
+                log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (lang=%s)",
+                         event["id"], foreign_lang or "heuristic")
             return
         content = {"headline": translated["headline"],
                    "lead": translated.get("lead", ""),
@@ -517,9 +560,6 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
             # (translated content already passed; raw foreign NEVER reaches here)
             EventsRepo(db).set_status(event["id"], "HELD")
             log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (final gate)", event["id"])
-            return
-            EventsRepo(db).set_status(event["id"], "HELD")  # NEEDS_LANGUAGE_PROCESSING
-            log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s", event["id"])
             return
         draft = {"headline": content["headline"], "lead": content["lead"],
                  "details": content["details"], "source_names": src_names,
