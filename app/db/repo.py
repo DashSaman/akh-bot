@@ -450,6 +450,20 @@ class PublicationsRepo:
         )
         return int(row["c"]) if row else 0
 
+    def new_posts_since(self, since: datetime) -> int:
+        """First sends only (NEW channel messages). Lifecycle EDITS also mark
+        a publication SENT with a refreshed updated_at, but an edit adds no
+        channel message — counting edits burned the daily post cap and
+        starved real publications (2026-10-04 no-news incident)."""
+        row = self.db.query_one(
+            "SELECT COUNT(*) AS c FROM publications p WHERE p.status='SENT' "
+            "AND p.updated_at>=? AND NOT EXISTS ("
+            "  SELECT 1 FROM publications q WHERE q.story_id=p.story_id "
+            "  AND q.status='SENT' AND q.id<p.id)",
+            (since.isoformat(timespec="seconds"),),
+        )
+        return int(row["c"]) if row else 0
+
 
 class JobsRepo:
     def __init__(self, db: Database) -> None:

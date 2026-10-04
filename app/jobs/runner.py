@@ -164,13 +164,20 @@ def make_send_handler(db: Database, settings: Settings,
         # URGENT-FIX §3: a rate-capped publication is THROTTLED — rescheduled
         # to the next eligible window; it NEVER consumes failure retries and
         # NEVER becomes permanently FAILED merely because of the cap.
-        sent_1h = pubs.sent_since(now - timedelta(hours=1))
-        sent_24h = pubs.sent_since(now - timedelta(hours=24))
+        # INCIDENT-2026-10-04: caps count NEW posts only (new_posts_since);
+        # lifecycle edits refresh a SENT row's updated_at but add no channel
+        # message — counting them starved publishing once edits pushed
+        # sent_24h to the daily cap.
+        sent_1h = pubs.new_posts_since(now - timedelta(hours=1))
+        sent_24h = pubs.new_posts_since(now - timedelta(hours=24))
         if sent_1h >= min(cap, getattr(settings, "max_posts_per_hour", 12))                 or sent_24h >= getattr(settings, "max_posts_per_day", 120):
-            # next eligible: when the oldest SENT-in-window ages out
+            # next eligible: when the oldest first-send ages out of the window
             oldest = db.query_one(
-                "SELECT MIN(updated_at) AS t FROM publications WHERE status='SENT'"
-                " AND updated_at>=?", ((now - timedelta(hours=24)).isoformat(timespec="seconds"),))
+                "SELECT MIN(p.updated_at) AS t FROM publications p WHERE p.status='SENT'"
+                " AND p.updated_at>=? AND NOT EXISTS ("
+                "  SELECT 1 FROM publications q WHERE q.story_id=p.story_id"
+                "  AND q.status='SENT' AND q.id<p.id)",
+                ((now - timedelta(hours=24)).isoformat(timespec="seconds"),))
             retry_in = 300.0
             if sent_24h >= getattr(settings, "max_posts_per_day", 120):
                 retry_in = 3600.0
@@ -307,13 +314,14 @@ def make_publish_handler(db: Database, settings: Settings,
                 log.info("publish suppressed: stale %.0fmin (story %s)", age_min, story_id)
                 return True
 
-        # lifecycle-aware rate caps (provisional stories are noisier)
+        # lifecycle-aware rate caps (provisional stories are noisier);
+        # INCIDENT-2026-10-04: count NEW posts only — edits add no message.
         lifecycle = story.get("lifecycle") or "CONFIRMED"
         cap = (getattr(settings, "max_provisional_posts_per_hour", 6)
                if lifecycle == "PROVISIONAL"
                else getattr(settings, "max_confirmed_posts_per_hour", 12))
         now = datetime.now(timezone.utc)
-        if pubs.sent_since(now - timedelta(hours=1)) >= cap:
+        if pubs.new_posts_since(now - timedelta(hours=1)) >= cap:
             return False
 
         if pubs.already_sent(story_id, platform, payload_hash):
@@ -340,9 +348,9 @@ def make_publish_handler(db: Database, settings: Settings,
             pubs.mark(pub_id, "FAILED", error=result.get("error"))
             return False
 
-        if pubs.sent_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
+        if pubs.new_posts_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
             return False
-        if pubs.sent_since(now - timedelta(hours=24)) >= settings.max_posts_per_day:
+        if pubs.new_posts_since(now - timedelta(hours=24)) >= settings.max_posts_per_day:
             return False
         text = payload.get("text") or ""
         publisher = telegram_publisher_factory()

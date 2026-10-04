@@ -149,11 +149,21 @@ def test_rate_cap_throttles_not_fails(db, settings):
     class B: short_name = "راسته"; name_fa = "راسته"; tagline_fa = "خ"; telegram_handle = "R"
     process_new_items_v2(db, B(), S())
     story = db.query_one("SELECT * FROM stories")
-    # saturate the 1h cap with fake SENT rows (on real stories)
+    # saturate the 1h cap with fake SENT rows — one FIRST send per DISTINCT
+    # story (same-story rows are lifecycle edits and no longer consume caps;
+    # see INCIDENT-2026-10-04 regression in tests/test_rate_cap_edits.py)
     now = datetime.now(timezone.utc)
-    cap_story = db.query_one("SELECT MAX(id) AS m FROM stories")["m"]
+    base_story = db.query_one("SELECT MAX(id) AS m FROM stories")["m"]
     for i in range(12):
-        pid = PublicationsRepo(db).upsert(cap_story, "telegram", f"cap{i}-{i}", 1)
+        db.execute(
+            "INSERT INTO events(title, status, first_seen_at, last_seen_at)"
+            " VALUES ('رخداد', 'PUBLISHED', '2026-10-03T10:00:00+00:00', '2026-10-03T10:00:00+00:00')")
+        db.execute(
+            "INSERT INTO stories(id, event_id, slug, headline, lead, draft_json, version,"
+            " status, created_at, updated_at) VALUES (?, (SELECT MAX(id) FROM events),"
+            " ?, 'خبر', 'لید', '{}', 1, 'DRAFT', '2026-10-03T10:00:00+00:00', '2026-10-03T10:00:00+00:00')",
+            (base_story + 1 + i, f"cap{i}"))
+        pid = PublicationsRepo(db).upsert(base_story + 1 + i, "telegram", f"cap{i}-{i}", 1)
         db.execute("UPDATE publications SET status='SENT', updated_at=? WHERE id=?",
                    (now.isoformat(timespec="seconds"), pid))
 
