@@ -269,24 +269,43 @@ def register_branded_fallback(db, *, story_id: int, event_id: int | None,
                           path=card or "")
 
 
+UA = "Mozilla/5.0 (compatible; RastehBot/1.0)"
+
+
 async def fetch_og_media(url: str, client_factory=None) -> list[dict[str, str]]:
     """Resolve og:image / og:video / twitter:image from the ORIGINAL article
-    page (used when the feed itself carried no media, e.g. Google News links
-    resolved to the canonical newsroom). Bounded: 8s timeout, HTML only."""
-    import re as _re
-
+    page (async). Bounded: 8s timeout, HTML only."""
     if not url:
         return []
     try:
         factory = client_factory or httpx.AsyncClient
         async with factory(timeout=8, follow_redirects=True,
-                           headers={"User-Agent": "Mozilla/5.0 (compatible; RastehBot/1.0)"}) as client:
+                           headers={"User-Agent": UA}) as client:
             resp = await client.get(url)
-        if resp.status_code != 200 or "html" not in (resp.headers.get("content-type") or "html").lower():
-            return []
-        head = resp.text[:60000]
+        return _parse_og(resp)
     except Exception:  # noqa: BLE001
         return []
+
+
+def fetch_og_media_sync(url: str) -> list[dict[str, str]]:
+    """Sync variant for the (sync) pipeline attach step."""
+    if not url:
+        return []
+    try:
+        with httpx.Client(timeout=8, follow_redirects=True,
+                          headers={"User-Agent": UA}) as client:
+            resp = client.get(url)
+        return _parse_og(resp)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _parse_og(resp) -> list[dict[str, str]]:
+    import re as _re
+
+    if resp.status_code != 200 or "html" not in (resp.headers.get("content-type") or "html").lower():
+        return []
+    head = resp.text[:60000]
     props = dict(_re.findall(
         r'<meta[^>]+(?:property|name)=["\'](og:(?:image|video)(?::secure_url)?|twitter:(?:image|image:src))["\'][^>]+content=["\']([^"\']+)["\']',
         head, _re.I))

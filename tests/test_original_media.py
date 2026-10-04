@@ -49,6 +49,21 @@ def test_extract_media_refs_priority_and_dedup():
     assert extract_media_refs(_Entry(summary="no media here")) == []
 
 
+def test_og_resolution_prefers_original_newsroom_image():
+    html = ('<html><head>'
+            '<meta property="og:image" content="https://news.example/hero.jpg">'
+            '<meta name="twitter:image" content="https://news.example/tw.jpg">'
+            '</head></html>')
+
+    class _Resp:
+        status_code = 200
+        headers = {"content-type": "text/html"}
+        text = html
+
+    refs = M._parse_og(_Resp())
+    assert refs == [{"url": "https://news.example/hero.jpg", "type": "photo"}]
+
+
 # ---------------- ladder 1+2: file_id then URL-direct ----------------
 
 @pytest.mark.asyncio

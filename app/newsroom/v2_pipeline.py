@@ -422,7 +422,7 @@ def _attach_event_media(db, settings, event_id: int, story_id: int, headline: st
         # page (also unwraps Google-News links to the real newsroom media).
         if registered == 0 and items:
             try:
-                og = media_mod.fetch_og_media(items[0]["url"])
+                og = media_mod.fetch_og_media_sync(items[0]["url"])
             except Exception:  # noqa: BLE001
                 og = []
             for ref in og[:1]:
