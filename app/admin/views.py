@@ -235,6 +235,49 @@ async def source_set_trust(request: Request, source_id: int,
     return RedirectResponse("/admin/sources", status_code=303)
 
 
+@router.post("/sources/{source_id}/update")
+async def source_update(request: Request, source_id: int, csrf: str = Form(""),
+                        identity: str = Form(""), category: str = Form(""),
+                        priority: str = Form(""), polling_tier: str = Form(""),
+                        publication_policy: str = Form(""),
+                        status: str = Form("")):
+    """§SRC: full dynamic edit — identity/category/priority/tier/policy.
+    Takes effect on the next scheduler cycle; no restart."""
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    from app.newsroom.source_manager import SourceManager
+    user = request.session.get("user", "admin")
+    SourceManager(_db(request)).update_source(
+        source_id, user, identity=identity, category=category,
+        priority=priority, polling_tier=polling_tier,
+        publication_policy=publication_policy, status=status)
+    return RedirectResponse("/admin/sources", status_code=303)
+
+
+@router.post("/sources/{source_id}/test")
+async def source_test(request: Request, source_id: int, csrf: str = Form("")):
+    """§SRC 13: safe read-only probe; result stored on the row for display."""
+    if (r := await require_login(request)) or (c := _csrf_reject(request, csrf)):
+        return r or c
+    from app.newsroom.source_manager import SourceManager
+    user = request.session.get("user", "admin")
+    res = SourceManager(_db(request)).test_source(source_id)
+    from app.db.repo import AuditRepo
+    AuditRepo(_db(request)).log(user, "test_source", "sources", source_id,
+                                old="", new=str(res.get("http", res)))
+    return RedirectResponse(f"/admin/sources?tested={source_id}", status_code=303)
+
+
+@router.get("/source-audit", response_class=HTMLResponse)
+async def source_audit_page(request: Request):
+    if (r := await require_login(request)):
+        return r
+    from app.db.repo import AuditRepo
+    rows = AuditRepo(_db(request)).recent(120)
+    return templates.TemplateResponse(
+        request, "admin/source_audit.html", _ctx(request, audit=rows))
+
+
 @router.post("/sources/{source_id}/status")
 async def source_set_status(request: Request, source_id: int, status: str = Form(...),
                             csrf: str = Form("")):

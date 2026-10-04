@@ -549,6 +549,27 @@ class JobsRepo:
         return self.db.query("SELECT * FROM jobs ORDER BY id DESC LIMIT ?", (limit,))
 
 
+class AuditRepo:
+    """§SRC 15: who changed what on sources — old value, new value, time."""
+
+    def __init__(self, db) -> None:
+        self.db = db
+
+    def log(self, actor: str, action: str, entity: str, entity_id: int | None,
+            old: str = "", new: str = "") -> None:
+        from datetime import datetime, timezone
+        self.db.execute(
+            "INSERT OR IGNORE INTO source_audit (actor, action, entity,"
+            " entity_id, old_value, new_value, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (actor, action, entity, entity_id, old[:200], new[:200],
+             datetime.now(timezone.utc).isoformat(timespec="seconds")))
+
+    def recent(self, limit: int = 100):
+        return self.db.query(
+            "SELECT * FROM source_audit ORDER BY id DESC LIMIT ?", (limit,))
+
+
 class SettingsRepo:
     def __init__(self, db: Database) -> None:
         self.db = db

@@ -1,0 +1,18 @@
+{% extends "admin/base.html" %}
+{% block title %}تاریخچه تغییر منابع{% endblock %}
+{% block content %}
+<h1>تاریخچه تغییر منابع <span class="small">— چه کسی، چه زمانی، مقدار قبلی/جدید</span></h1>
+<table>
+  <tr><th>زمان</th><th>کاربر</th><th>اقدام</th><th>منبع</th><th>قبلی</th><th>جدید</th></tr>
+{% for a in audit %}
+  <tr>
+    <td class="small">{{ a.created_at[:16] }}</td>
+    <td>{{ a.actor }}</td>
+    <td>{{ a.action }}</td>
+    <td><code>#{{ a.entity_id }}</code></td>
+    <td class="small">{{ a.old_value or '—' }}</td>
+    <td class="small">{{ a.new_value or '—' }}</td>
+  </tr>
+{% endfor %}
+</table>
+{% endblock %}

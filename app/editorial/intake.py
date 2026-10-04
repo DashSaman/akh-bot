@@ -192,6 +192,15 @@ class EditorialIntake:
                 "📰 تحریریه راسته — خبر/فوروارد/عکس/ویدیو بفرستید؛ "
                 "همه از همان خط تولید استاندارد عبور می‌کنند."})
             return
+        if cmd in ("/sources", "/source", "/addsource", "/enablesource",
+                   "/disablesource", "/testsource"):
+            if not (self._can(admin, "can_manage_sources")
+                    or self._can(admin, "can_manage_admins")):
+                await self._api("sendMessage", {"chat_id": chat_id,
+                    "text": "⛔ مجوز مدیریت منبع ندارید."})
+                return
+            await self._on_source_command(admin, chat_id, cmd, parts[1:])
+            return
         if not self._can(admin, "can_manage_admins"):
             await self._api("sendMessage", {"chat_id": chat_id,
                                             "text": "⛔ دسترسی مدیریتی ندارید."})
@@ -224,6 +233,61 @@ class EditorialIntake:
             return
         await self._api("sendMessage", {"chat_id": chat_id,
                                         "text": "فرمان ناشناخته."})
+
+    # ------------------------------------------------------- source commands
+    async def _on_source_command(self, admin: dict, chat_id: str, cmd: str,
+                                 args: list[str]) -> None:
+        """§SRC 6: full source control from the private bot — same manager as
+        the admin UI, same server-side normalization/SSRF/dedup rules."""
+        from app.newsroom.source_manager import SourceManager
+        mgr = SourceManager(self.db)
+        actor = "bot:" + str(admin["telegram_user_id"])
+        if cmd == "/sources":
+            rows = self.db.query(
+                "SELECT id, name, status, enabled, identity FROM sources"
+                " WHERE status != 'LIMITED_X_ACCESS' ORDER BY enabled DESC, id"
+                " LIMIT 30")
+            lines = [f"#{r['id']} {r['name'][:26]} [{'🟢' if r['enabled'] else '⚪'}"
+                     f"{r['status'][:3]}] {r['identity'][:14]}"
+                     for r in rows]
+            await self._api("sendMessage", {"chat_id": chat_id,
+                "text": "منابع:\n" + ("\n".join(lines) or "—") +
+                        "\n\n/addsource · /enablesource · /disablesource · /testsource"})
+            return
+        if cmd == "/addsource" and args:
+            res = mgr.add_source(args[0], actor=actor)
+            src = res.get("source")
+            text = res["message_fa"]
+            if src:
+                text += (f"\nنام: {src['name']}\nپلتفرم: {src['platform']}"
+                         f"\nوضعیت: {'فعال' if src['enabled'] else 'غیرفعال'}"
+                         f"\nهویت: {src['identity'] or '—'}"
+                         f"\nاولین بررسی: در صف")
+            await self._api("sendMessage", {"chat_id": chat_id, "text": text})
+            return
+        if cmd in ("/enablesource", "/disablesource", "/testsource") and args:
+            row = self.db.query_one(
+                "SELECT id FROM sources WHERE CAST(id AS TEXT)=? OR name LIKE ?"
+                " OR identity LIKE ? LIMIT 1",
+                (args[0], f"%{args[0]}%", f"%{args[0]}%"))
+            if not row:
+                await self._api("sendMessage", {"chat_id": chat_id,
+                                                "text": "❌ منبع یافت نشد."})
+                return
+            if cmd == "/testsource":
+                r = mgr.test_source(row["id"])
+                await self._api("sendMessage", {"chat_id": chat_id, "text":
+                    ("✅ سالم" if r.get("ok") else "❌ خطا")
+                    + f"\nHTTP: {r.get('http', '-')}\nآخرین آیتم: {r.get('latest_item') or '-'}"
+                    + (f"\nخطا: {r.get('error')}" if r.get("error") else "")})
+                return
+            ok = mgr.set_enabled(row["id"], cmd == "/enablesource", actor)
+            await self._api("sendMessage", {"chat_id": chat_id, "text":
+                ("✅ فعال شد — از چرخه بعدی دریافت می‌شود." if ok
+                 else "❌ تغییر ناموفق.")})
+            return
+        await self._api("sendMessage", {"chat_id": chat_id,
+                                        "text": "استفاده: /addsource <url|@name>"})
 
     # ----------------------------------------------------------- submissions
     def _ensure_manual_source(self) -> int:
