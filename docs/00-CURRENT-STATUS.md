@@ -24,11 +24,15 @@
    editMessageText (rejected by Telegram). Fallback to editMessageCaption.
 
 ## AI pool (9Router, localhost-only :20128)
-- Combo **rasteh-translation**: groq/qwen3.8-27b → groq/gpt-oss-120b →
-  openrouter/nemotron:free; emergency direct FreeAiRouter (groq); all-fail → HOLD
-  (fail-closed, foreign leak 0). Failover A/B/C proven.
-- Providers evaluated 17 / connected 3 (groq usable, openrouter emergency,
-  sambanova dormant-402) — see OWNER-ACTION-REQUIRED for unlocks.
+- Combo **rasteh-translation** (4 slots, 3 providers): groq/qwen3.8-27b →
+  groq/gpt-oss-120b → openrouter/nemotron:free (daily 50-req free quota,
+  quota-aware model-lock observed) → cf/llama-3.1-8b-fp8-fast; emergency direct
+  FreeAiRouter (groq, json_object prompt guaranteed); all-fail → HOLD
+  (fail-closed, foreign leak 0). Failover A/B/B2/C proven.
+- Providers evaluated 19 / connected 5 (groq PRIMARY, openrouter emergency,
+  cloudflare-ai emergency, llm7 emergency-quality, ZAI paid-blocked);
+  Gemini + NVIDIA BLOCKED_REGION; Cerebras/SambaNova/Z.AI-API BLOCKED_PAID;
+  Mistral/Qwen phone-walls — see OWNER-ACTION-REQUIRED.
 
 ## Pipeline hardening (2026-10-04 overnight, `a406f41`)
 - Translation thrash fix: 6 translations/pass budget + 5→60 min exponential backoff
@@ -41,7 +45,7 @@
 
 ## Standing blockers → docs/OWNER-ACTION-REQUIRED.md
 Telethon login · X email code (dialog parked) · Threads account decision ·
-optional AI-provider unlocks (Gemini verify / LLM7 popup / Cloudflare CAPTCHA) ·
+optional Mistral/Qwen phone-verify unlocks ·
 optional Groq/OpenRouter key rotation (one-time local log echo)
 
 ## Isolation

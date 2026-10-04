@@ -206,8 +206,13 @@ class FreeAiRouter:
                 "openai_compat": f"{st._base_url.rstrip('/')}/chat/completions",
             }[st.name]
             headers = {"Authorization": f"Bearer {st._key}"}
+            sys_text = system
+            # Groq rejects response_format=json_object unless the messages
+            # literally mention json; guarantee it on the fallback path.
+            if st.name == "groq" and "json" not in f"{system} {user}".lower():
+                sys_text = f"{system} Respond ONLY with a valid JSON object."
             payload = {"model": st.model,
-                       "messages": [{"role": "system", "content": system},
+                       "messages": [{"role": "system", "content": sys_text},
                                     {"role": "user", "content": user}],
                        "temperature": 0.2, "max_tokens": max_tokens,
                        "stream": False,
