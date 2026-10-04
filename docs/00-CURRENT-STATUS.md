@@ -3,7 +3,7 @@
 One current truth. Historical incident notes live in git history, not here.
 
 - **Repository HEAD:** 58af1ab
-- **Production runtime SHA:** 58af1ab (pre-hardening production; this commit
+- **Production runtime SHA:** 3848fdd (deployed 2026-10-04T15:59Z; container healthy; natural post-deploy SEND remote_id=530 at 16:06:31)
   deploys after clean-checkout + CI green)
 - **Governance:** PASS — tally: 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
 - **Parts:** PART 1 = PASS - PART 2 = BLOCKED_EXTERNAL - PART 3 = PASS - PART 4 = PASS - PART 5 = PASS - PART 6 = PASS - PART 7 = PASS - PART 8 = BLOCKED_EXTERNAL - PART 9 = PASS - PART 10 = PASS
