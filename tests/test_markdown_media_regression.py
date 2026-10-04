@@ -79,10 +79,13 @@ def test_broken_fallback_card_disabled_by_default(db, settings, story_with_media
 
 def test_fallback_card_flag_gates_registration(db, settings, story_with_media,
                                                monkeypatch, tmp_path):
+    """FINAL MEDIA closeout: the pipeline NEVER generates branded cards —
+    even with a stale flag forced on, _attach_event_media registers only
+    ORIGINAL/SOURCE_REFERENCE media (or nothing → text-only)."""
     monkeypatch.setattr(settings, "media_fallback_cards_enabled", True)
     monkeypatch.setattr("app.publishing.media.cache_dir",
                         lambda: str(tmp_path))
     v2_pipeline._attach_event_media(db, settings, 1, story_with_media,
                                     "آزمون کارت", "PROVISIONAL")
     cards = db.query("SELECT COUNT(*) c FROM media_assets WHERE kind='card'")
-    assert cards[0]["c"] == 1
+    assert cards[0]["c"] == 0, "pipeline must never register a generated card"

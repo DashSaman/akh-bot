@@ -69,10 +69,23 @@ def test_disk_guard(db, tmp_path, monkeypatch):
     assert M.media_downloads_allowed(db, critical=100) is True
 
 
-def test_branded_card(db, tmp_path, monkeypatch):
+def test_branded_card_retired(db, tmp_path, monkeypatch):
+    """FINAL MEDIA policy: generated headline-cards are RETIRED from
+    production (BRANDED_FALLBACK_ENABLED=false). The renderer module stays
+    for tests/history, but registration is a no-op by default."""
+    from app.config import get_settings
+    assert get_settings().media_fallback_cards_enabled is False
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    out = M.branded_card("تیتر آزمون کارت خبری راسته")
-    assert out.endswith(".png") and os.path.exists(out)
+    db.execute(
+        "INSERT INTO events(id,title,category,status,first_seen_at,last_seen_at)"
+        " VALUES (1,'t','general','NEW',datetime('now'),datetime('now'))")
+    db.execute(
+        "INSERT INTO stories(id,event_id,slug,headline,lead,draft_json,version,status,"
+        "created_at,updated_at) VALUES (1,1,'s','h','','{}',1,'DRAFT',"
+        "datetime('now'),datetime('now'))")
+    assert M.register_branded_fallback(db, story_id=1, event_id=1,
+                                       headline="تیتر آزمون") is None
+    assert M.assets_for_story(db, 1) == []
 
 
 def test_platform_page_renders_truthful_states(admin_client):

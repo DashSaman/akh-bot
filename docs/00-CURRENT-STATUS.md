@@ -1,9 +1,12 @@
-# 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-04 10:1xZ, incident-recovery)
+# 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-04 11:0xZ, media-closeout)
 
-- **Repository HEAD:** 76d2592 (GitHub main synced; server clean)
-- **Production runtime SHA:** cf3ff5a (deployed container code; 76d2592 adds docs only)
-- **Governance:** PASS — Matrix 56 DONE / 1 PARTIAL / 0 MISSING / 0 BROKEN / 4 BLOCKED_EXTERNAL
-- **Tests:** 334/334 · container healthy · watchdog active · queues draining
+- **Repository HEAD:** b5b7b29 (GitHub main synced; server clean)
+- **Production runtime SHA:** cf3ff5a → media-closeout deploy this session
+- **PART:** 1=PASS · 2=BLOCKED_EXTERNAL · 3=PASS (V2 LIVE) · 4=PASS · 5=PASS (9Router LIVE) · 6/7/8/9/10 = executable work COMPLETE
+- **Governance:** PASS — Matrix 58 DONE / 1 PARTIAL / 0 MISSING / 0 BROKEN / 2 BLOCKED_EXTERNAL
+
+## Runtime snapshot
+- Publication ledger SENT: **322** (telegram remote-mapped; duplicate-SEND violations 0)
 
 ## 2026-10-04 no-news incident — RESOLVED (4 stacked causes)
 1. **Edits consumed post caps** (`38c7e16`): lifecycle edits refresh a SENT row's

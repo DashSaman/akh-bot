@@ -86,6 +86,20 @@ def lifecycle_now(story) -> str:
     return (story.get("lifecycle") if isinstance(story, dict) else None) or "CONFIRMED"
 
 
+def _resolve_media_ref(db, story_id: int) -> dict | None:
+    """Publishable ORIGINAL asset for the story, resolved at SEND time
+    (FINAL MEDIA: file_id/URL ladder; no frozen paths, no generated cards)."""
+    from app.publishing import media as _media_mod
+
+    best = _media_mod.best_for_story(db, story_id)
+    if not best:
+        return None
+    return {"asset_id": best["id"],
+            "file_id": best["telegram_file_id"] or "",
+            "url": best["remote_url"] or "",
+            "video": best["kind"] == "video"}
+
+
 def _policy_blocked(db: Database, settings: Settings, story_id: int,
                     platform: str, payload_hash: str, pubs, stories) -> str | None:
     """Execution-time checks shared by all publish handlers: story existence,
@@ -209,9 +223,26 @@ def make_send_handler(db: Database, settings: Settings,
             log.warning("publish_send blocked: non-substantive body (story %s)", story_id)
             return True
         publisher = telegram_publisher_factory()
-        media_path = str(payload.get("media_path") or "")
-        result = (await publisher.send_media(media_path, caption=text)
-                  if media_path else await publisher.send_message(text))
+        # FINAL MEDIA ladder: Telegram file_id → public source URL → bounded
+        # temp download (deleted after) → text-only. NEVER a generated card.
+        from app.publishing import media as _media_mod
+        media_ref = _resolve_media_ref(db, story_id)
+        legacy_path = str(payload.get("media_path") or "")
+        if media_ref is not None and (media_ref.get("file_id") or media_ref.get("url")):
+            if _media_mod.media_downloads_allowed(db):
+                downloader = (lambda u, sid=story_id: _media_mod.download_to_temp(u, sid))
+            else:
+                downloader = None
+            result = await publisher.send_media_ref(
+                media_ref, text, video=bool(media_ref.get("video")),
+                downloader=downloader)
+            if result.get("ok") and result.get("file_id"):
+                _media_mod.set_telegram_file_id(db, int(media_ref.get("asset_id") or 0),
+                                                result["file_id"])
+        elif legacy_path:
+            result = await publisher.send_media(legacy_path, text)
+        else:
+            result = await publisher.send_message(text)
         pub_id = pubs.upsert(story_id, platform, payload_hash, int(story["version"]))
         db.execute("UPDATE publications SET chat_id=? WHERE id=?", (str(publisher.chat_id), pub_id))
         if result["ok"]:

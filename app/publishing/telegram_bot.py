@@ -180,6 +180,18 @@ def to_telegram_html(text: str) -> str:
     return "".join(parts)
 
 
+def _extract_file_id(data: dict, video: bool) -> str:
+    """Telegram file_id for later reuse (edits/re-posts without re-download)."""
+    try:
+        result = data.get("result") or {}
+        if video:
+            return str(result.get("video", {}).get("file_id", ""))
+        photos = result.get("photo") or []
+        return str(photos[-1].get("file_id", "")) if photos else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 class TelegramBotPublisher:
     platform = "telegram"
 
@@ -265,8 +277,70 @@ class TelegramBotPublisher:
         finally:
             fh.close()
         if data.get('ok'):
-            return {'ok': True, 'message_id': data['result']['message_id']}
+            return {'ok': True, 'message_id': data['result']['message_id'],
+                    'file_id': _extract_file_id(data, video)}
         return {'ok': False, 'error': 'telegram: %s' % data.get('description', '?')}
+
+    async def send_media_ref(self, ref, caption, video=False, downloader=None):
+        """ORIGINAL-MEDIA ladder (FINAL MEDIA policy):
+          1. Telegram file_id (reuse — no re-download)
+          2. public source URL sent directly (Telegram fetches it; we store nothing)
+          3. bounded temp download via `downloader` → upload → DELETE always
+          4. any failure → clean TEXT-ONLY post (never a generated card)
+        Returns {'ok', 'message_id', 'file_id', 'mode'}."""
+        import os as _os
+
+        cap = caption or ""
+        if not publisher_language_gate(cap):
+            return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
+        if len(cap) > 1020:
+            cap = cap[:1020]
+            if cap.count("**") % 2:
+                cap = cap.rsplit("**", 1)[0].rstrip()
+        method = "sendVideo" if video else "sendPhoto"
+        field = "video" if video else "photo"
+
+        # 1) file_id reuse
+        fid = (ref or {}).get("file_id", "")
+        if fid:
+            data = await self._api(method, {"chat_id": self.chat_id, field: fid,
+                                            "caption": to_telegram_html(cap),
+                                            "parse_mode": "HTML"})
+            if data.get("ok"):
+                return {"ok": True, "message_id": data["result"]["message_id"],
+                        "file_id": fid, "mode": "file_id"}
+
+        # 2) URL-direct — Telegram downloads the ORIGINAL from the source
+        url = (ref or {}).get("url", "")
+        if url:
+            data = await self._api(method, {"chat_id": self.chat_id, field: url,
+                                            "caption": to_telegram_html(cap),
+                                            "parse_mode": "HTML"})
+            if data.get("ok"):
+                return {"ok": True, "message_id": data["result"]["message_id"],
+                        "file_id": _extract_file_id(data, video), "mode": "url"}
+
+        # 3) bounded temporary bytes — deleted after success AND failure
+        tmp_path = (ref or {}).get("tmp_path", "")
+        if not tmp_path and url and downloader is not None:
+            try:
+                tmp_path = await downloader(url)
+            except Exception:  # noqa: BLE001
+                tmp_path = ""
+        if tmp_path and _os.path.exists(tmp_path):
+            try:
+                result = await self.send_media(tmp_path, cap, video=video)
+                if result.get("ok"):
+                    return dict(result, mode="tmp")
+            finally:
+                try:
+                    _os.unlink(tmp_path)
+                    log.info("temp media deleted after send: %s", tmp_path)
+                except OSError:
+                    pass
+
+        # 4) text-only
+        return await self.send_message(caption)
 
 
     async def edit_message(self, message_id: str, text: str) -> dict[str, Any]:

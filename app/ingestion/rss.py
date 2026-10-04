@@ -28,6 +28,45 @@ def _entry_date(entry: Any) -> datetime | None:
     return None
 
 
+def extract_media_refs(entry: Any) -> list[dict[str, str]]:
+    """Original-media candidates from ONE feed entry, best first:
+    media:content / media:thumbnail → enclosures → first <img>/<video> in
+    the summary HTML. Truthful public URLs only — no paywall bypass; entries
+    without accessible media simply return an empty list (→ text-only)."""
+    import json as _json
+    import re as _re
+
+    refs: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def _add(url: str, mtype: str) -> None:
+        url = (url or "").strip()
+        if not url.startswith(("http://", "https://")) or url in seen:
+            return
+        seen.add(url)
+        refs.append({"url": url, "type": mtype})
+
+    for mc in (getattr(entry, "media_content", None) or []):
+        url = mc.get("url", "") if isinstance(mc, dict) else ""
+        if url:
+            _add(url, "video" if "video" in (mc.get("medium", "") or mc.get("type", "")) else "photo")
+    for mt in (getattr(entry, "media_thumbnail", None) or []):
+        if isinstance(mt, dict) and mt.get("url"):
+            _add(mt["url"], "photo")
+    for enc in (getattr(entry, "enclosures", None) or []):
+        href = enc.get("href", "") if isinstance(enc, dict) else ""
+        etype = enc.get("type", "") or ""
+        if href:
+            _add(href, "video" if "video" in etype else "photo")
+    text = getattr(entry, "summary", "") or getattr(entry, "description", "") or ""
+    if text:
+        for m in _re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', text, _re.I)[:2]:
+            _add(m, "photo")
+        for m in _re.findall(r'<video[^>]+src=["\']([^"\']+)["\']', text, _re.I)[:1]:
+            _add(m, "video")
+    return refs[:3]
+
+
 def lineage_for(url: str, forward_from: str | None) -> str:
     if forward_from:
         return f"fwd:{forward_from}"
@@ -106,13 +145,15 @@ async def fetch_rss_source(source: dict[str, Any], db: Any, *,
                 or (published is not None and published >= activated)
             )
             fp = fingerprints_for(url, title, text)
+            import json as _json
+            media_refs = extract_media_refs(entry)
             item_id = items.insert(
                 source_id=source["id"], platform="rss", external_key=external_key,
                 url=url, canonical_url=fp["canonical_url"], title=title, text=text,
                 language=detect_language(f"{title} {text}"), author=getattr(entry, "author", "") or "",
                 published_at=published.isoformat(timespec="seconds") if published else None,
                 lineage_key=lineage_for(url, None), activation_ok=activation_ok,
-                fingerprints=fp,
+                fingerprints=fp, media=media_refs,
             )
             summary["new"] += 1
             log.info("rss new item %s (source %s)", item_id, source["id"],

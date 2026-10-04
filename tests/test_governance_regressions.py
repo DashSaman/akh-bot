@@ -82,9 +82,14 @@ def test_asserted_sha_equality_without_verification_fails():
 
 
 def test_ambiguous_sent_wording_fails():
+    import re as _re
+
+    st = (DOCS / "00-CURRENT-STATUS.md").read_text(encoding="utf-8")
+    m = _re.search(r"Publication ledger SENT: \*\*\d+\*\*", st)
+    assert m, "SENT metric line missing from status doc"
     for bad in ("Publication ledger SENT: 92 and 86 SENT mapped",
                 "total: SENT 89 today"):
-        d = mutated_docs(status_repl=("SENT: **208**", bad))
+        d = mutated_docs(status_repl=(m.group(0), bad))
         rc, out = validate(d)
         assert rc != 0, "must reject: %r" % bad
         assert "ambiguous metric" in out

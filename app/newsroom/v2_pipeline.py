@@ -383,50 +383,77 @@ def _enqueue_send(db, settings, story_id: int, text: str, ph: str, pub_id: int,
     JobsRepo(db).enqueue(
         "publish_send",
         {"story_id": story_id, "platform": "telegram", "payload_hash": ph,
-         "text": text, "publication_id": pub_id, "media_path": media},
+         "text": text, "publication_id": pub_id,
+         # FINAL MEDIA: media resolves at SEND time from media_assets
+         # (file_id/URL ladder) — no frozen paths in the payload.
+         "use_media_registry": True},
         dedupe_key="send:%s:telegram:%s" % (story_id, ph[:16]), priority=priority)
 
 
 def _attach_event_media(db, settings, event_id: int, story_id: int, headline: str,
                         lifecycle: str) -> None:
-    """PART-6: register the event's media references as SOURCE_REFERENCE
-    (original bytes need Telethon — BLOCKED until the owner session exists),
-    plus our BRANDED_FALLBACK card so the public post always carries a visual
-    when no original is capturable. Truthful labels only."""
+    """FINAL MEDIA policy: register ORIGINAL source-media references for the
+    canonical story — feed media (enclosure/media:content/<img>) first, then
+    og:image/og:video from the ORIGINAL article page (bounded). Generated
+    branded cards are RETIRED: when no real media exists the post is
+    TEXT-ONLY. Truthful labels only."""
     import json as _json
 
     from app.publishing import media as media_mod
 
     try:
+        registered = 0
         items = db.query(
-            "SELECT r.id, r.source_id, r.media_json FROM event_items ei"
+            "SELECT r.id, r.source_id, r.media_json, r.url FROM event_items ei"
             " JOIN raw_items r ON r.id=ei.raw_item_id"
-            " WHERE ei.event_id=? AND r.media_json NOT IN ('', '[]')", (event_id,))
+            " WHERE ei.event_id=? AND r.activation_ok=1"
+            " ORDER BY r.id", (event_id,))
         for it in items[:5]:
-            for ref in (_json.loads(it["media_json"] or "[]") or [])[:2]:
+            refs = _json.loads(it["media_json"] or "[]") or []
+            for ref in refs[:2]:
                 url = ref.get("url") if isinstance(ref, dict) else str(ref)
-                if url:
-                    media_mod.register_source_reference(
+                kind = ref.get("type", "photo") if isinstance(ref, dict) else "photo"
+                if url and media_mod.register_source_reference(
                         db, url=url, story_id=story_id, event_id=event_id,
                         raw_item_id=it["id"], source_id=it["source_id"],
-                        caption_ref=headline[:80])
-        # MEDIA-REGRESSION (owner screenshot): the old Pillow fallback card
-        # renders broken Persian (no shaping/font). Cards stay OFF until the
-        # new renderer passes its visual fixtures — text-only meanwhile.
-        if getattr(settings, "media_fallback_cards_enabled", False):
-            icon = {"PROVISIONAL": "🔴", "CONFLICTING": "🟠"}.get(lifecycle, "🟢")
-            media_mod.register_branded_fallback(db, story_id=story_id,
-                                                event_id=event_id,
-                                                headline=headline, icon=icon)
+                        kind=kind, caption_ref=headline[:80]):
+                    registered += 1
+        # feed carried nothing? resolve og:image from the ORIGINAL article
+        # page (also unwraps Google-News links to the real newsroom media).
+        if registered == 0 and items:
+            try:
+                og = media_mod.fetch_og_media(items[0]["url"])
+            except Exception:  # noqa: BLE001
+                og = []
+            for ref in og[:1]:
+                media_mod.register_source_reference(
+                    db, url=ref["url"], story_id=story_id, event_id=event_id,
+                    raw_item_id=items[0]["id"], source_id=items[0]["source_id"],
+                    kind=ref["type"], caption_ref=headline[:80])
     except Exception:  # noqa: BLE001 — media must never block publication
         log.exception("media attach failed event %s", event_id)
 
 
-def _best_media_path(db, story_id: int) -> str:
+def _best_media_ref(db, story_id: int) -> dict | None:
+    """Resolve the publishable ORIGINAL asset at SEND time (survives
+    redeploys — no frozen file paths in job payloads)."""
     from app.publishing import media as media_mod
 
     best = media_mod.best_for_story(db, story_id)
-    return (best or {}).get("path", "")
+    if not best:
+        return None
+    return {
+        "asset_id": best["id"],
+        "file_id": best["telegram_file_id"] or "",
+        "url": best["remote_url"] or "",
+        "video": best["kind"] == "video",
+    }
+
+
+def _best_media_path(db, story_id: int) -> str:
+    """LEGACY (kept for queued jobs): empty under the FINAL MEDIA policy —
+    media is resolved fresh at send time from the asset registry."""
+    return ""
 
 
 def _enqueue_edit(db, settings, story_id: int, text: str, ph: str, pub_id: int,

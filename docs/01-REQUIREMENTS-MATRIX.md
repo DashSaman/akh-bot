@@ -32,7 +32,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | VERIFY-004 | 60-min resolution deadline | DONE | _resolve_deadlines | test suite | no stale VERIFYING live | — | 9affb54 | maps to ARCHIVED+note | — |
 | LANG-001 | Persian-only public gate (INV-007/008) | DONE | story_content_language_check content-level | test_language_gate.py | public foreign=0/75 | — | 69059ab | — | — |
 | LANG-002 | Fail-closed at every publisher API | DONE | gates in send/edit/send_media | test_media/test_publisher | live Arabic fixture → 0 API calls | — | 69059ab | — | — |
-| LANG-003 | ar/en/he→fa translation before publish | BLOCKED_EXTERNAL | translator.py (v2: forced source-language path, consistency audit, cache, sync bridge) + V2 wiring | tests/test_translation_ai.py (18) | foreign→HELD live (correct no-leak); LIVE translation awaits owner free key | — | PART5 | zero provider keys configured — external blocker | 5 |
+| LANG-003 | ar/en/he→fa translation before publish | DONE | translator.py (v2: forced source-language path, consistency audit, cache, sync bridge) + V2 wiring via 9Router combo rasteh-translation | tests/test_translation_ai.py (18) | LIVE ar/en/he→fa via 9Router→Groq (translator_live_check FAILURES:0); foreign→HELD fail-closed, leak=0 | — | PART5 | unblocked 2026-10-04: free Groq key + 9Router gateway live | 5 |
 | EDIT-001 | Meaningful headline gate | DONE | is_valid_headline + speaker parse | test_dedup/gates | 0 bad headlines live | — | 69059ab | — | — |
 | EDIT-002 | Body quality gate (no dup/fragment) | DONE | body_quality_gate compact mode | test suite | sweeps show clean | — | 69059ab | — | — |
 | EDIT-003 | Icon-only lifecycle, no «✅ تأیید شد» | DONE | STATUS_ICONS | test_language_gate | channel clean | EDITORIAL-STYLE | 69059ab | — | — |
@@ -58,7 +58,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | ADMIN-003 | Manual news intake (web+inbox) | DONE | admin /admin/intake → RawItem → SAME canonical V2 pipeline (never direct-publish) | tests/test_admin_final.py (2) | live page; processed through normal gates | ADMIN-PANEL.md | FINAL | — | 7 |
 | ADMIN-004 | Health/24-7 dashboard page | DONE | admin /admin/health (workers/queue/sources/endpoints/V2/verification/disk/DB/blocked deps) | tests/test_admin_final.py (2) | live page, no secrets | ADMIN-PANEL.md | FINAL | — | 7 |
 | AI-001 | Optional, zero-cost router | DONE | integrations/llm/router.py (config-resolved providers, per-provider state, ZERO_COST/AI_FREE_ONLY, key redaction) | tests/test_translation_ai.py | 0 keys → NOT_CONFIGURED states exposed on /admin/ai; deterministic newsroom unaffected | AI-USE-POLICY | PART5 | live call awaits owner key | 5 |
-| AI-002 | Provider failover A→B→C→det | BLOCKED_EXTERNAL | router failover loop (A-fail→B, 429→RATE_LIMITED, all-fail→None/HOLD) | tests/test_translation_ai.py (failover, all-fail, rate-limit) | unit+mock proven; LIVE proof impossible without a provider key | — | PART5 | owner free key unblocks live proof | 5 |
+| AI-002 | Provider failover A→B→C→det | DONE | router failover loop + 9Router combo fallback (qwen→gpt-oss→openrouter) + direct-groq emergency + HOLD | tests/test_translation_ai.py + scripts/failover_tests.sh | LIVE failover A(404)→B PASS, chain→#3 PASS, all-dead→direct groq PASS, all-fail→HOLD (foreign leak 0) | — | PART5 | unblocked 2026-10-04: live failover proven on production | 5 |
 | AI-003 | Factual consistency audit of AI output | DONE | translator.consistency_issues (NUMBERS_INVENTED/NEGATION_REVERSED incl ar/he/CERTAINTY_ESCALATED/FOREIGN_OUTPUT) | tests/test_translation_ai.py (numbers/negation/uncertainty rejects) | reject → HOLD live in V2 path | — | PART5 | — | 5 |
 | AUT-001 | 24/7 in-container workers, no agent | DONE | lifespan 6 tasks + restart unless-stopped | restart tests | soak metrics jsonl | AUTONOMY | 69059ab | — | — |
 | AUT-002 | Watchdog + orphan + SLA markers | DONE | watchdog_loop | test suite | hb fresh, orphan=0 | — | 69059ab | — | — |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | DONE | seo/analytics.py (cookieless aggregates) + middleware + /admin/growth (views/referrers/UTM/publication+source metrics/SEO health) | test suite (pages render) | live recording started; soak metrics continue | ANALYTICS.md | FINAL | GSC awaits domain (owner) | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 56 · PARTIAL 1 · BROKEN 0 · MISSING 0 · BLOCKED_EXTERNAL 4 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 58 · PARTIAL 1 · BROKEN 0 · MISSING 0 · BLOCKED_EXTERNAL 2 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
