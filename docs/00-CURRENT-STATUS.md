@@ -1,51 +1,59 @@
-# 00-CURRENT-STATUS — RUNTIME TRUTH (2026-10-04 FINAL-HARDENING)
+# 00-CURRENT-STATUS — RUNTIME TRUTH (release-freeze 2026-10-04, v1.0.0-telegram)
 
-One current truth. Historical incident notes live in git history, not here.
+One current truth. History lives in git.
 
-- **Repository HEAD:** 3a24426
-- **Production runtime SHA:** 3a24426 (quality-gates deploy 2026-10-04T16:4xZ; healthy; CI green)
-  deploys after clean-checkout + CI green)
-- **Governance:** PASS — tally: 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
+- **Repository HEAD:** c674510
+- **Production runtime SHA:** c674510 (deployed, healthy; CI green on this SHA)
+- **Governance:** PASS — 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
 - **Parts:** PART 1 = PASS - PART 2 = BLOCKED_EXTERNAL - PART 3 = PASS - PART 4 = PASS - PART 5 = PASS - PART 6 = PASS - PART 7 = PASS - PART 8 = BLOCKED_EXTERNAL - PART 9 = PASS - PART 10 = PASS
-- **Tests:** full suite green in clean-checkout/CI runs
+- **Tests:** 414/414 (clean GitHub checkout: compileall + pytest + governance + docker build)
 
-## Publishing
-- Telegram @RastehNews is the ONLY publishing platform (owner decision:
-  X API declined over Pay-Per-Use cost risk; the auto-created X developer
-  app has NO card attached, zero balance, posts nothing).
-- MAX_NEW_POSTS_PER_DAY=500, MAX_NEW_POSTS_PER_HOUR=60 — safety ceilings;
-  lifecycle guards provisional=45/confirmed=60 never cut the global hourly
-  capacity. Edits NEVER consume caps (created_at filter).
-- Publication ledger SENT: **411** (2026-10-04 hardening baseline; live
-  value in the admin dashboard).
+## Scope (FINAL, frozen)
+INGEST many sources -> normalize -> verify -> Iran-first priority ->
+dedup/Event/Story -> original media when available -> **publish ONLY to
+Telegram @RastehNews**. No automatic X/Threads/Facebook/Instagram posting
+(ledger is 100% telegram, 1435+ rows). X / Truth Social remain INPUT sources
+only; LIMITED_X_ACCESS is not a release blocker; no paid social APIs.
 
-## Editorial policy
-- Iran-first ~90% soft allocation: P2/P3 defer one pass ONLY while rolling
-  Iran share is under target AND Iran supply exists; capacity spills
-  automatically; never fabricated.
-- IRAN_CRISIS_MODE: triggers on two-plus distinct-source P0 Iran events in
-  30 minutes; extends on fresh triggers; stays active until the calm window
-  actually expires; translation budget doubles in crisis. Verification is
-  NEVER weakened (order is not trust).
-- Multi-admin editorial bot: numeric-id auth; submissions become held
-  RawItems and flow the SAME canonical pipeline on approval; album debounce
-  (one group = one submission + one preview); file_id-only media; forwards
-  map canonical identity; unknown origins never gain trust.
-- Admin UI: /admin/bot-admins + /admin/editorial-inbox (login + CSRF).
+## Caps (effective runtime)
+MAX_NEW_POSTS_PER_DAY=500, MAX_NEW_POSTS_PER_HOUR=60, lifecycle
+provisional=45 / confirmed=60 (never cut global capacity). Edits consume
+ZERO new-post capacity (created_at filter). 500/day is a ceiling, never a
+quota — low-value content never fills it.
+
+## Editorial quality
+- Iran-first ~90% soft allocation with natural spill (never fabricated).
+- IRAN_CRISIS_MODE: correct state machine; verification NEVER weakens.
+- Hard quality gates: HOLD_ABUSIVE, CONTEXT_INCOMPLETE, LOW_VALUE_CONTENT,
+  LOW_MATERIALITY, MATERIALITY_FLOOR, DROP_DUPLICATE, HOLD_TRANSLATION_QUALITY
+  — enforced at ENQUEUE and re-enforced at SEND time.
+- One event = one story = one SEND; material updates EDIT the same post
+  (remote_id preserved); non-material duplicates DROP.
+
+## Source management (self-service, DB-driven, no restart)
+/admin/sources (+edit/test/audit) and bot commands (/sources /addsource
+/enablesource /disablesource /testsource) with can_manage_sources;
+SSRF-guarded normalization; duplicate-endpoint merge; canonical identity
+(polling priority != trust); publication_policy AUTO/VERIFY_ONLY/
+DISCOVERY_ONLY/NEVER_PUBLISH. @caronline_original OWNER_ENABLED, identity
+CarOnline, fetching live.
+
+## Multi-admin editorial bot
+Numeric-user_id auth (bot_admins); text/forward/photo/video/album intake ->
+held RawItems -> SAME canonical pipeline on approval; no direct-send bypass;
+album debounce; file_id-only media (zero permanent binaries).
+
+## Media policy
+Original source media via file_id/URL ladder; no branded cards
+(MEDIA_FALLBACK_CARDS_ENABLED=false, 0 branded assets); temp deleted
+success/failure; media failure degrades to text-only.
 
 ## Watchdogs
-PUBLICATION_PIPELINE_STALLED | IRAN_PUBLICATION_PIPELINE_STALLED (10-minute
-Iran liveness + bounded job nudge) | SOURCE_MONOPOLY_DETECTED |
-SOURCE_STARVATION — warn/diagnose only; never auto-block; never fake posts.
+PUBLICATION_PIPELINE_STALLED, IRAN_PUBLICATION_PIPELINE_STALLED,
+SOURCE_MONOPOLY_DETECTED, SOURCE_STARVATION — warn/diagnose only.
 
-## Sources
-187 endpoints / 78 canonical identities; X + Truth Social endpoints are
-truthfully LIMITED_X_ACCESS (no paid API; Truth Social RSS is
-Cloudflare-blocked server-side). NAYA/Yashar: highest SPEED priority, normal
-trust. Diversity soft guard: 25/45 percent rolling-hour canonical caps,
-dominant-identity only, breaking always passes.
-
-## AI pool (9Router, localhost-only)
-Six-slot combo rasteh-translation across four companies: groq, cohere2,
-groq, cf/mistral, openrouter, cf/llama8; direct-groq emergency fallback with
-guaranteed json_object prompt; all-fail degrades to HOLD fail-closed.
+## Remaining external limitations
+- X posting: owner cost policy (Pay-Per-Use declined) — input-only.
+- Truth Social RSS: Cloudflare-blocked server-side.
+- Threads: account suspended pending human review.
+- Mistral/Qwen consoles: phone verification walls.
