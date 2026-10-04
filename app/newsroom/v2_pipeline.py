@@ -44,6 +44,23 @@ from app.newsroom.translator import needs_translation_for, translate_event_sync
 from app.publishing.telegram_bot import is_persian_public_text
 from app.newsroom.diversity import defer_for_diversity, story_source_identities
 from app.newsroom.iran_policy import crisis_active, defer_for_iran_capacity
+
+def _defer_cap_reached(db, event_id: int, *,
+                       max_age_min: int = 20) -> bool:
+    """True once a deferred story has waited long enough: soft fairness
+    yields to freshness. Age is measured from the event's first sighting —
+    restart-safe, no counters."""
+    from datetime import datetime, timedelta, timezone
+    row = db.query_one("SELECT first_seen_at FROM events WHERE id=?",
+                       (event_id,))
+    if not row or not row["first_seen_at"]:
+        return True  # no timestamp -> never defer
+    try:
+        t0 = datetime.fromisoformat(str(row["first_seen_at"]).replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    age = datetime.now(timezone.utc) - t0
+    return age > timedelta(minutes=max_age_min)
 from app.verification.gates import (    classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk, priority_tier,
 )
 
@@ -622,15 +639,17 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
             EventsRepo(db).set_status(event["id"], "HELD")
             log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (final gate)", event["id"])
             return
-        if defer_for_iran_capacity(db, content["headline"], weight):
+        if (not _defer_cap_reached(db, event["id"])) and \
+                defer_for_iran_capacity(db, content["headline"], weight):
             EventsRepo(db).set_status(event["id"], "READY")
             summary["iran_capacity_deferred"] = summary.get(
                 "iran_capacity_deferred", 0) + 1
             log.info("V2 IRAN_CAPACITY_DEFER event %s (soft allocation, retried)",
                      event["id"])
             return
-        if defer_for_diversity(db, event["id"], weight,
-                               alternatives_ready=_ready_alternatives(db, event["id"])):
+        if (not _defer_cap_reached(db, event["id"])) and \
+                defer_for_diversity(db, event["id"], weight,
+                                    alternatives_ready=_ready_alternatives(db, event["id"])):
             EventsRepo(db).set_status(event["id"], "READY")
             summary["diversity_deferred"] = summary.get("diversity_deferred", 0) + 1
             log.info("V2 DIVERSITY_DEFER event %s (soft fairness, retried next pass)",
@@ -660,8 +679,9 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
         if not ok or not is_persian_public_text(text):
             return
         _tw, _weight2 = classify_priority(content["headline"])
-        if defer_for_diversity(db, event["id"], _weight2,
-                               alternatives_ready=_ready_alternatives(db, event["id"])):
+        if (not _defer_cap_reached(db, event["id"])) and \
+                defer_for_diversity(db, event["id"], _weight2,
+                                    alternatives_ready=_ready_alternatives(db, event["id"])):
             summary["diversity_deferred"] = summary.get("diversity_deferred", 0) + 1
             return
         current = stories.get(story["id"])
