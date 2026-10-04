@@ -44,7 +44,7 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | EDIT-004 | Source attribution exactly once, names only | DONE | build_public_text source_names | tests | منبع in samples | — | 69059ab | — | — |
 | MEDIA-001 | sendPhoto/sendVideo + Persian caption | DONE | telegram_bot.send_media | test_media.py | msg 247 photo live | — | 9affb54 | — | 6 |
 | MEDIA-002 | Temp cache + cleanup + disk guard | DONE | media.py cleanup/publisher gates | test_media.py | cache=0 live | — | 9affb54 | — | 6 |
-| MEDIA-003 | Source-media capture (original) | PARTIAL | capture_original (accessible/permitted/size-limited → ORIGINAL_MEDIA) + SOURCE_REFERENCE refs live | tests/test_media_assets.py | WEB_FALLBACK items → SOURCE_REFERENCE + BRANDED_FALLBACK live | — | FINAL | original bytes need Telethon session (owner) | 6 |
+| MEDIA-003 | Source-media capture (original) | DONE | FINAL MEDIA ladder: RSS media:content/enclosure/inline extraction + og:image/og:video from original article; send via Telegram file_id → URL-direct → bounded temp (deleted after) → text-only; no persistent binaries | tests/test_original_media.py (ladder, temp deletion, file_id reuse, disk guard) + tests/test_media_assets.py | live on production 2026-10-04; Telegram-source photo bytes still need Telethon (owner OTP) — media arrives URL-direct from public sources meanwhile | — | FINAL | RSS/Web original media LIVE; Telethon bytes = owner OTP pending (optional enhancement, not a blocker) | 6 |
 | MEDIA-004 | Branded fallback card | DONE | media.branded_card Pillow | test_media | card sent live | — | 9affb54 | — | 6 |
 | MEDIA-005 | Media admin page | DONE | media_views.py | test_media page | /admin/media live | — | 9affb54 | — | 6 |
 | PUB-001 | Idempotent ledger (no dup posts) | DONE | publications UNIQUE + handler edit-path | test_publisher | retry=0 dup proven | PUBLISHING.md | 69059ab | — | — |
@@ -71,4 +71,4 @@ Statuses: DONE / PARTIAL / BROKEN / MISSING / BLOCKED_EXTERNAL only. Evidence = 
 | GROWTH-001 | Analytics/UTM/Soak dashboard | DONE | seo/analytics.py (cookieless aggregates) + middleware + /admin/growth (views/referrers/UTM/publication+source metrics/SEO health) | test suite (pages render) | live recording started; soak metrics continue | ANALYTICS.md | FINAL | GSC awaits domain (owner) | 10 |
 
 ## Tallies (recomputed, evidence-rule enforced)
-DONE 58 · PARTIAL 1 · BROKEN 0 · MISSING 0 · BLOCKED_EXTERNAL 2 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
+DONE 59 · PARTIAL 0 · BROKEN 0 · MISSING 0 · BLOCKED_EXTERNAL 2 — total 61 (+4 GATE rows: GATE-03/05/06 PARTIAL, GATE-11 DONE)
