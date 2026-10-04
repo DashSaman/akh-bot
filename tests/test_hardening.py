@@ -342,6 +342,29 @@ def test_editorial_inbox_page(admin_client):
 
 
 # ------------------------------------------------- §8 Iran stall watchdog
+def test_dead_drafts_do_not_inflate_iran_supply(db, settings):
+    """AUDIT-2026-10-04: a legacy DRAFT whose event is already PUBLISHED is
+    dead — it must neither keep the Iran stall watchdog warning nor make the
+    90% allocator defer P2/P3 with phantom supply."""
+    from app.newsroom.iran_policy import defer_for_iran_capacity, iran_waiting_count
+    from app.ingestion.scheduler import _iran_stall_check
+    from app.db.repo import SettingsRepo
+    db.execute(
+        "INSERT INTO events (title, status, verification, first_seen_at,"
+        " last_seen_at) VALUES ('قدیمی', 'PUBLISHED', 'UNVERIFIED', ?, ?)",
+        (_TS, _TS))
+    eid = db.query_one("SELECT MAX(id) id FROM events")["id"]
+    db.execute(
+        "INSERT INTO stories (event_id, slug, headline, lead, draft_json,"
+        " version, status, created_at, updated_at)"
+        " VALUES (?, 'dead1', 'تحریم جدید علیه ایران', 'لید', '{}', 1, 'DRAFT',"
+        " ?, ?)", (eid, _NOW, _NOW))
+    assert iran_waiting_count(db) == 0, "dead drafts are not supply"
+    assert defer_for_iran_capacity(db, "نتایج لیگ فوتبال", 15) is False
+    _iran_stall_check(db, settings)
+    assert SettingsRepo(db).get("IRAN_PUBLICATION_PIPELINE_STALLED") == ""
+
+
 def test_iran_stall_watchdog(db, settings):
     from app.ingestion.scheduler import _iran_stall_check
     # no SEND for >10m + an Iran-ready story → marker set, jobs nudged

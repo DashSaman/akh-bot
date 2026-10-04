@@ -67,7 +67,9 @@ def iran_waiting_count(db) -> int:
     """Never-sent stories that are Iran-related (supply for allocation)."""
     rows = db.query(
         "SELECT st.id, st.headline FROM stories st"
-        " WHERE st.status='DRAFT' AND NOT EXISTS ("
+        " JOIN events e ON e.id = st.event_id"
+        " WHERE st.status='DRAFT' AND e.status != 'PUBLISHED'"
+        "   AND NOT EXISTS ("
         "  SELECT 1 FROM publications p WHERE p.story_id = st.id"
         "  AND p.status='SENT')")
     return sum(1 for r in rows if is_iran_related(r["headline"] or ""))

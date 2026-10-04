@@ -268,7 +268,9 @@ def _iran_stall_check(db, settings) -> None:
         return
     ready = db.query(
         "SELECT st.id, st.headline FROM stories st"
-        " WHERE st.status IN ('DRAFT','READY') AND NOT EXISTS ("
+        " JOIN events e ON e.id = st.event_id"
+        " WHERE st.status IN ('DRAFT','READY') AND e.status != 'PUBLISHED'"
+        "   AND NOT EXISTS ("
         "  SELECT 1 FROM publications p WHERE p.story_id=st.id"
         "  AND p.status='SENT')")
     iran_ready = [r for r in ready if is_iran_related(r["headline"] or "")]
