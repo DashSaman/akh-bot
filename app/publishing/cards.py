@@ -122,9 +122,13 @@ def render_card_v2(headline: str, lifecycle: str = "PROVISIONAL",
     d.text((64, _H - 56), "@RastehNews", font=_font(30, "Medium"),
            fill=_HANDLE_BLUE, anchor="lm")
 
+    # PERSISTENT-CARD (2026-10-04 incident): cards used to land under the
+    # baked-in /srv/data/media — the container's ephemeral layer — so every
+    # redeploy orphaned pending card sends. Cards live under DATA_DIR (the
+    # akhbot_data volume) and survive restarts.
     out = out_path or os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "..", "..", "data",
-        "media", f"card-v2-{int(__import__('time').time())}.png")
+        os.environ.get("DATA_DIR", "/data"), "media",
+        f"card-v2-{int(__import__('time').time())}.png")
     out = os.path.abspath(out)
     os.makedirs(os.path.dirname(out), exist_ok=True)
     img.save(out, "PNG")

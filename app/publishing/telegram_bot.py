@@ -250,7 +250,11 @@ class TelegramBotPublisher:
         try:
             fh = open(path, 'rb')
         except OSError as e:
-            return {'ok': False, 'error': 'cache: %s' % e}
+            # MEDIA-LOSS (2026-10-04 incident): a branded-card path may be
+            # gone after a container redeploy (ephemeral layer). Publishing
+            # must degrade to TEXT-ONLY, never fail the story.
+            log.warning("send_media file missing (%s) — falling back to text-only", e)
+            return await self.send_message(caption)
         try:
             async with httpx.AsyncClient(timeout=120, transport=self.transport) as client:
                 resp = await client.post(
