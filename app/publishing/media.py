@@ -144,7 +144,10 @@ def cleanup_published_and_expired(db, ttl_minutes: int = 60, max_mb: float = 512
 def disk_percent() -> int:
     import shutil
 
-    total, used, _ = shutil.disk_usage(os.environ.get("DATA_DIR", "/data") if os.name != "nt" else "C:\\")
+    path = os.environ.get("DATA_DIR", "/data") if os.name != "nt" else "C:\\"
+    if not os.path.isdir(path):
+        path = os.getcwd()  # CI/clean-checkout: /data absent — measure cwd
+    total, used, _ = shutil.disk_usage(path)
     return int(100 * used / max(1, total))
 
 
