@@ -277,6 +277,18 @@ class TelegramBotPublisher:
         data = await self._api("editMessageText", payload)
         if data.get("ok"):
             return {"ok": True}
+        # MEDIA-EDIT: stories published via sendPhoto (branded cards) have a
+        # CAPTION, not text — editMessageText rejects them ("no text in the
+        # message to edit"). Retry once with editMessageCaption.
+        if "no text in the message" in str(data.get("description", "")).lower():
+            cap = text[:1020]
+            if cap.count("**") % 2:
+                cap = cap.rsplit("**", 1)[0].rstrip()
+            data = await self._api("editMessageCaption", {
+                "chat_id": self.chat_id, "message_id": int(message_id),
+                "caption": to_telegram_html(cap), "parse_mode": "HTML"})
+            if data.get("ok"):
+                return {"ok": True}
         return {"ok": False, "error": f"telegram: {data.get('description', '?')}"}
 
 
