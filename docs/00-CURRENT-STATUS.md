@@ -1,6 +1,7 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-04 10:1xZ, incident-recovery)
 
-- **Repository HEAD = Production SHA:** cf3ff5a (GitHub main synced; server clean)
+- **Repository HEAD:** 76d2592 (GitHub main synced; server clean)
+- **Production runtime SHA:** cf3ff5a (deployed container code; 76d2592 adds docs only)
 - **Governance:** PASS — Matrix 56 DONE / 1 PARTIAL / 0 MISSING / 0 BROKEN / 4 BLOCKED_EXTERNAL
 - **Tests:** 334/334 · container healthy · watchdog active · queues draining
 
