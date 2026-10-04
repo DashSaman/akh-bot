@@ -137,6 +137,11 @@ class SourceManager:
         platform = "x" if "/x.com/" in norm["url"] or "twitter.com" in norm["url"] \
             else norm["platform"]
         status = "DISCOVERED" if platform == "x" else "APPROVED"
+        # telegram endpoints poll via the t.me/s/ web preview collector
+        # (this deployment has no Telethon credentials); source_type drives
+        # the scheduler dispatch — "direct" would never be fetched.
+        stype = ("telegram_web_preview" if platform == PLATFORM_TG
+                 else ("rss" if platform == "rss" else "direct"))
         self.db.execute(
             "INSERT INTO sources (name, platform, external_id, url, language,"
             " category, source_type, status, enabled, priority,"
@@ -144,11 +149,11 @@ class SourceManager:
             " created_at, notes, verification_allowed,"
             " can_increase_independent_count, publication_policy,"
             " polling_tier)"
-            " VALUES (?, ?, ?, ?, ?, ?, 'direct', ?, ?, ?, ?, 'OWNER_ENABLED',"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OWNER_ENABLED',"
             " ?, ?, 'added via source manager', 1, 1, ?, ?)",
             (name, platform, norm["external_id"], norm["url"],
              language or ("fa" if platform == PLATFORM_TG else ""),
-             category or "general", status,
+             category or "general", stype, status,
              0 if status == "DISCOVERED" else 1, priority,
              self.polling_seconds(polling_tier), ident, _now(),
              "AUTO" if status != "DISCOVERED" else "NEVER_PUBLISH",
