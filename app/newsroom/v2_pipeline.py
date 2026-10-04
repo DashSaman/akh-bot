@@ -576,7 +576,12 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
     if not is_persian_public_text(content["headline"] + " " + " ".join(content["details"])):
         foreign_lang = _event_source_language(db, event["id"])
     evidence = content["headline"] + "\n" + "\n".join(content["details"])
-    if needs_translation_for(foreign_lang, evidence):
+    # §FA-FIRST: Persian claim won the headline → the content is already
+    # Persian; configured foreign source language must not force a
+    # redundant translation (which was the entire held-backlog bottleneck).
+    if foreign_lang and is_persian_public_text(evidence):
+        foreign_lang = ""
+    if foreign_lang and needs_translation_for(foreign_lang, evidence):
         # THRASH-FIX: per-pass budget + exponential backoff so a saturated
         # free-tier AI pool is spent on NEW translations instead of retrying
         # the same held events every pass (~3min) forever.

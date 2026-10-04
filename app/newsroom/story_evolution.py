@@ -35,21 +35,42 @@ def _informative(text: str) -> int:
     return len({w for w in normalize(text or "").split() if len(w) > 2})
 
 
+def _is_persian_claim(text: str) -> bool:
+    """Content-level Persian check for claim text (never fooled by footers:
+    Arabic morphology / Hebrew / Latin-dominant all fail)."""
+    from app.publishing.telegram_bot import is_persian_public_text
+    return is_persian_public_text(text or "")
+
+
 def select_headline(claims: list[dict]) -> str:
     """Strongest meaningful claim → headline; "" when nothing qualifies
-    (caller must HOLD — a fragment never publishes)."""
+    (caller must HOLD — a fragment never publishes).
+
+    §FA-FIRST (owner 2026-10-04): if a Persian claim exists at the best
+    verification tier, the Persian headline wins immediately — the story
+    publishes without waiting for the translation queue, and the foreign
+    item stays as corroborating evidence. Language never outranks trust."""
     ranked = sorted(
         claims,
         key=lambda c: (_STATE_RANK.get(c.get("state") or "UNVERIFIED", 2),
                        -_informative(c.get("text") or "")),
     )
-    for c in ranked:
-        text = (c.get("text") or "").strip()
-        if not text:
-            continue
-        cand = extract_headline("", text) or text.split("\n", 1)[0].strip()
-        if is_valid_headline(cand):
-            return cand[:140]
+    # Persian preference applies WITHIN the best verification tier only —
+    # language never outranks trust (priority != trust invariant).
+    best_rank = min((_STATE_RANK.get(c.get("state") or "UNVERIFIED", 2)
+                     for c in ranked), default=2)
+    top_tier = [c for c in ranked
+                if _STATE_RANK.get(c.get("state") or "UNVERIFIED", 2)
+                == best_rank]
+    persian = [c for c in top_tier if _is_persian_claim(c.get("text") or "")]
+    for subset in (persian, ranked):
+        for c in subset:
+            text = (c.get("text") or "").strip()
+            if not text:
+                continue
+            cand = extract_headline("", text) or text.split("\n", 1)[0].strip()
+            if is_valid_headline(cand):
+                return cand[:140]
     return ""
 
 
