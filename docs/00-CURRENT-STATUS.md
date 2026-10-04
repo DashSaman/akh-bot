@@ -24,15 +24,20 @@
    editMessageText (rejected by Telegram). Fallback to editMessageCaption.
 
 ## AI pool (9Router, localhost-only :20128)
-- Combo **rasteh-translation** (4 slots, 3 providers): groq/qwen3.8-27b →
-  groq/gpt-oss-120b → openrouter/nemotron:free (daily 50-req free quota,
-  quota-aware model-lock observed) → cf/llama-3.1-8b-fp8-fast; emergency direct
-  FreeAiRouter (groq, json_object prompt guaranteed); all-fail → HOLD
-  (fail-closed, foreign leak 0). Failover A/B/B2/C proven.
-- Providers evaluated 19 / connected 5 (groq PRIMARY, openrouter emergency,
-  cloudflare-ai emergency, llm7 emergency-quality, ZAI paid-blocked);
-  Gemini + NVIDIA BLOCKED_REGION; Cerebras/SambaNova/Z.AI-API BLOCKED_PAID;
-  Mistral/Qwen phone-walls — see OWNER-ACTION-REQUIRED.
+- Combo **rasteh-translation** (6 slots, 4 companies): groq/qwen3.8-27b →
+  cohere2/command-a-03-2025 (Cohere trial via compat node, 20/min 1k/month) →
+  groq/gpt-oss-120b → cf/mistral-small-3.1-24b → openrouter/nemotron:free
+  (daily 50-req quota, quota-aware model-lock observed) →
+  cf/llama-3.1-8b-fp8-fast; emergency direct FreeAiRouter (groq, json_object
+  prompt guaranteed); all-fail → HOLD (fail-closed, foreign leak 0).
+  Failover A (groq→cohere) / B (all-dead→direct) proven 2026-10-04.
+- Providers evaluated 20 / connected 6 (groq PRIMARY, cohere PRIMARY,
+  cloudflare-ai emergency+primary-quality, openrouter emergency, llm7
+  emergency-quality, ZAI paid-blocked); Gemini + NVIDIA BLOCKED_REGION;
+  Cerebras/SambaNova/Z.AI-API BLOCKED_PAID; Mistral-console/Qwen phone-walls;
+  OpenCode free models return empty content (re-validated); mimo-free hidden
+  auth; Kiro OAuth+IDE-only. provider_bench digit check now normalizes
+  Persian/Arabic digits (cf/mistral-small + cohere/command-a actually PASS).
 
 ## Pipeline hardening (2026-10-04 overnight, `a406f41`)
 - Translation thrash fix: 6 translations/pass budget + 5→60 min exponential backoff

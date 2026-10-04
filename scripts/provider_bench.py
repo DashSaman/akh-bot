@@ -65,10 +65,16 @@ def ask(model, src_lang, text):
     return {"ok": True, "text": content, "dt": dt, "served": body.get("model", "")}
 
 
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹"
+                             "٠١٢٣٤٥٦٧٨٩",
+                             "0123456789" * 2)
+
+
 def check(src, out):
     fails = []
+    norm = out.translate(_FA_DIGITS)  # Persian/Arabic digits count as preserved
     for n in re.findall(r"\d+", src):
-        if n not in out:
+        if n not in norm:
             fails.append(f"num {n}")
     bad = BAD_SCRIPT.findall(out)
     if bad:
