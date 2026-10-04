@@ -1,28 +1,44 @@
-# 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-03 18:2xZ, MASTER-FINAL)
+# 00-CURRENT-STATUS — RUNTIME TRUTH (snapshot 2026-10-04 10:1xZ, incident-recovery)
 
-- **Repository HEAD:** de205e5 (docs may run ahead of runtime — valid)
-- **Production runtime SHA:** bc1481e → final deploy this session (verified in-container AKHBOT_GIT_SHA)
-- **PART:** 1=PASS · 2=BLOCKED_EXTERNAL · 3=PASS (V2 LIVE) · 4=PASS · 5=BLOCKED_EXTERNAL(key) · 6/7/8/9/10 = executable work COMPLETE
-- **EVENT_ENGINE_V2_ENABLED:** true · Matrix: **56 DONE / 1 PARTIAL / 0 MISSING / 0 BROKEN / 4 BLOCKED_EXTERNAL** (governance PASS)
+- **Repository HEAD = Production SHA:** cf3ff5a (GitHub main synced; server clean)
+- **Governance:** PASS — Matrix 56 DONE / 1 PARTIAL / 0 MISSING / 0 BROKEN / 4 BLOCKED_EXTERNAL
+- **Tests:** 334/334 · container healthy · watchdog active · queues draining
 
-## Runtime snapshot
-- Publication ledger SENT: **208** (telegram remote-mapped 208; duplicate-SEND violations 0)
+## 2026-10-04 no-news incident — RESOLVED (4 stacked causes)
+1. **Edits consumed post caps** (`38c7e16`): lifecycle edits refresh a SENT row's
+   updated_at; the hourly/daily caps counted them, pushed sent_24h to
+   MAX_POSTS_PER_DAY=120 by 08:19 and every real publish_send was THROTTLED +1h.
+   Caps now count first sends only (`new_posts_since`).
+2. **Cards lived in the ephemeral layer** (`e5bbf1b`): branded-card PNGs were written
+   under /srv/data/media — every redeploy orphaned pending card sends (file-not-found
+   FAILED). Cards now render into the akhbot_data volume (DATA_DIR/media) and
+   send_media degrades to a clean TEXT-ONLY post if a media file is ever missing.
+3. **Jobs loop could freeze** (`cf3ff5a`): a hung network call inside a handler stalled
+   the whole publish loop for hours. Handlers now run under
+   asyncio.wait_for(job_handler_timeout_seconds=180) — timeout = normal retry.
+4. **Media-message edits dropped** (`ed81766`): lifecycle edits of sendPhoto posts used
+   editMessageText (rejected by Telegram). Fallback to editMessageCaption.
 
-## Sources (owner XLSX imported; §17 truthful activation)
-- 110 endpoints / 78 canonical identities (+ naya/yashar) — identity = authoritative Entity ID
-- **ACTIVE 58** (18 Telegram web-fallback + 10 direct RSS + 30 Google-News public feeds) · **BLOCKED_AUTH 27** (X/TruthSocial) · **UNSUPPORTED 25** (official docs/OSINT pages/people without public feeds)
-- Load soak §25 PASS: CPU 0.3% · RAM 66MB · ingest fresh · 0 backlog · 0 source errors
+## AI pool (9Router, localhost-only :20128)
+- Combo **rasteh-translation**: groq/qwen3.8-27b → groq/gpt-oss-120b →
+  openrouter/nemotron:free; emergency direct FreeAiRouter (groq); all-fail → HOLD
+  (fail-closed, foreign leak 0). Failover A/B/C proven.
+- Providers evaluated 17 / connected 3 (groq usable, openrouter emergency,
+  sambanova dormant-402) — see OWNER-ACTION-REQUIRED for unlocks.
 
-## This-session deliverables (P6-P10 + registry)
-- **P6**: media_assets — truthful ORIGINAL_MEDIA/SOURCE_REFERENCE/BRANDED_FALLBACK/UNAVAILABLE + checksum dedup + V2 sendPhoto wiring (fallback card never labeled original)
-- **P7**: /admin/intake (manual → canonical pipeline only) + /admin/health (24/7 ops view) + SRC-003 complete
-- **P8**: platform_accounts (CORE-009) — independent per-platform config/health; fanout gated on enabled+authenticated
-- **P9**: DR drill PASS (isolated volume: all tables + watermarks + 208 remote mappings; DR boot healthy; migrations no-op; 12/12 portability)
-- **P10**: GROWTH-001 (cookieless analytics + /admin/growth) — trust pages/OG/schema/sitemaps/RSS already live
-- INGEST-002 hardened (persist-then-advance watermark; burst regression test)
+## Pipeline hardening (2026-10-04 overnight, `a406f41`)
+- Translation thrash fix: 6 translations/pass budget + 5→60 min exponential backoff
+  (held events no longer re-translate every ~3 min pass and starve the free tier).
 
-## Standing blockers → docs/OWNER-ACTION-REQUIRED.md (6 items)
-Telethon login · Gemini/Groq key · Meta OAuth · X API (cost) · public domain · GSC
+## Sources
+- 110 endpoints / 78 canonical identities (+ NAYA/Yashar telegram): every ACTIVE
+  source delivered items in 24h (zero24 = 0); publications flow across many sources
+  (no single-source lock). OSINT feeds store-only for stale backfill by design.
+
+## Standing blockers → docs/OWNER-ACTION-REQUIRED.md
+Telethon login · X email code (dialog parked) · Threads account decision ·
+optional AI-provider unlocks (Gemini verify / LLM7 popup / Cloudflare CAPTCHA) ·
+optional Groq/OpenRouter key rotation (one-time local log echo)
 
 ## Isolation
-Only akhbot-app resources touched; unrelated host services never modified.
+Only akhbot-app / nine-router / Rasteh data touched; unrelated host services never modified.
