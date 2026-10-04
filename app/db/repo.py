@@ -287,6 +287,13 @@ class EventsRepo:
     def list(self, limit: int = 100) -> list[dict[str, Any]]:
         return self.db.query("SELECT * FROM events ORDER BY last_seen_at DESC LIMIT ?", (limit,))
 
+    def set_quality_hold(self, event_id: int, reason: str) -> None:
+        """Quality gates hold an event WITHOUT touching claim verification
+        (that column has a hard CHECK); the reason lives in quality_hold."""
+        self.db.execute(
+            "UPDATE events SET status='HELD', quality_hold=? WHERE id=?",
+            (reason, event_id))
+
     def set_status(self, event_id: int, status: str, verification: str | None = None) -> None:
         if verification:
             self.db.execute("UPDATE events SET status=?, verification=? WHERE id=?", (status, verification, event_id))

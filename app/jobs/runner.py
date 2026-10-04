@@ -180,6 +180,34 @@ def make_send_handler(db: Database, settings: Settings,
                 pubs.mark(pubs.upsert(story_id, platform, payload_hash, int(story["version"])),
                           "SKIPPED", error="STALE_SUPERSEDED")
                 return True
+        # SEND-TIME quality re-gate: a job queued BEFORE a gate update is
+        # still judged by the CURRENT public-quality rules at send time
+        # (owner 2026-10-04: the «بتول زن موشلی» post raced through this way)
+        from app.newsroom.quality_gates import publication_quality_gate
+        from app.verification.gates import classify_priority
+        _tw2, _w2 = classify_priority(str(story["headline"] or ""))
+        _body2 = ""
+        try:
+            import json as _json2
+            _d = _json2.loads(story["draft_json"] or "{}")
+            _body2 = " ".join(_d.get("details") or [])
+        except Exception:  # noqa: BLE001
+            _body2 = ""
+        _qreason = publication_quality_gate(
+            db, str(story["headline"] or ""), _body2, _w2,
+            event_id=story["event_id"])
+        if _qreason:
+            pubs.mark(pubs.upsert(story_id, platform, payload_hash,
+                                  int(story["version"])), "SKIPPED",
+                      error=f"QUALITY_{_qreason}")
+            try:
+                from app.db.repo import EventsRepo as _ER
+                _ER(db).set_quality_hold(story["event_id"], _qreason)
+            except Exception:  # noqa: BLE001 — non-fatal bookkeeping
+                log.exception("send-time gate hold bookkeeping failed")
+            log.warning("publish_send quality-blocked at SEND time story=%s"
+                        " reason=%s", story_id, _qreason)
+            return True
         lifecycle = story.get("lifecycle") or "CONFIRMED"
         cap = (getattr(settings, "max_provisional_posts_per_hour", 6)
                if lifecycle == "PROVISIONAL"

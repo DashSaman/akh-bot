@@ -83,6 +83,20 @@ TRIVIA_PATTERNS = (
 )
 TRIVIA_ESCAPE = re.compile("|".join(MATERIAL_KEYWORDS[:24]))
 
+# §ABUSE (owner 2026-10-04): unambiguous Persian profanity / mockery /
+# gutter-talk words that a serious newsroom NEVER publishes, even quoted in
+# a headline. When they ARE the story (verbatim quote in body), the material
+# escape below still applies.
+ABUSIVE_PATTERNS = (
+    re.compile(r"\b(کص|کیر|جنده|قحبه|حروم‌زاده|حرومزاده|بی‌شرف|بیشرف|عوضی|"
+               r"فاحشه|شلوار|مرد\s?کون|کون\s?ده|هرمی|الکسی|لات\b|لاقول|"
+               r"مغز\s?کم|عقب‌مانده|کره|معلول|حیوان صفت)"),
+    re.compile(r"زن\s?(موشلی|کثیف|بدکاره)|مرد\s?(کثیف|پست)|اخوند\s?(کذب|دزد)"),
+    re.compile(r"تنکه|حروم|ننه\s?تو|دختت|خواهرت"),
+)
+ABUSIVE_ESCAPE = re.compile("|".join(MATERIAL_KEYWORDS))
+
+
 CEREMONY_PATTERNS = (
     re.compile(r"استقبال کرد|استقبال نمود|استقبال به عمل آورد"),
     re.compile(r"اعتبارنامه خود را تقدیم|تقدیم اعتبارنامه"),
@@ -160,6 +174,14 @@ def low_value(headline: str, body: str = "") -> bool:
     return any(p.search(t) for p in TRIVIA_PATTERNS)
 
 
+def abusive_content(headline: str, body: str = "") -> bool:
+    """§ABUSE: profanity/mockery as content — HOLD regardless of weight."""
+    t = _norm(headline + " " + body)
+    if ABUSIVE_ESCAPE.search(t):
+        return False
+    return any(p.search(t) for p in ABUSIVE_PATTERNS)
+
+
 def routine_ceremony(headline: str, body: str = "") -> bool:
     """§5: protocol-only diplomacy — unless material substance present."""
     t = _norm(headline + " " + body)
@@ -234,6 +256,8 @@ def _event_sources(db, event_id: int) -> set[str]:
 def publication_quality_gate(db, headline: str, body: str, weight: int,
                              event_id: int = 0) -> str | None:
     """Returns None (publish) or a HOLD reason. §1-§6, §9, §10."""
+    if abusive_content(headline, body):
+        return "HOLD_ABUSIVE"
     if low_value(headline, body):
         return "LOW_VALUE_CONTENT"
     if routine_ceremony(headline, body):
