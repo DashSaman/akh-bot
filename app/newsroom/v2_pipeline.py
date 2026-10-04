@@ -55,8 +55,8 @@ _MAX_CONTINUATION_MIN = max(CONTINUATION_MINUTES.values())
 
 # THRASH-FIX: max fresh translations per pipeline pass — keeps a saturated
 # free-tier AI pool from being burned on retry loops (backoff column below).
-_TRANSLATE_BUDGET_PER_PASS = 6
-_TRANSLATE_BUDGET_CRISIS = 12  # A4: IRAN_CRISIS_MODE concentrates capacity
+_TRANSLATE_BUDGET_PER_PASS = 14
+_TRANSLATE_BUDGET_CRISIS = 20  # A4: IRAN_CRISIS_MODE concentrates capacity
 
 
 def _translation_gate(db, event_id: int, summary: dict) -> str | None:
