@@ -47,6 +47,26 @@ sends now drip under the genuine daily cap (120/24h reached by real volume).
   auth; Kiro OAuth+IDE-only. provider_bench digit check now normalizes
   Persian/Arabic digits (cf/mistral-small + cohere/command-a actually PASS).
 
+## 2026-10-04 FINAL INTEGRATED — Iran-first policy + editorial bot
+- MAX_POSTS_PER_DAY=500 / MAX_POSTS_PER_HOUR=60 (safety ceilings; edits
+  never counted — created_at filter). Real controls stay editorial.
+- Iran-first allocation (app/newsroom/iran_policy.py): soft ~90% target —
+  P2/P3 stories defer one pass ONLY while Iran share < 70% AND Iran supply
+  exists; capacity spills automatically otherwise. P0/P1 always pass.
+- IRAN_CRISIS_MODE: auto-trigger on >=2 distinct-source P0 Iran events/30m,
+  translation budget 6->12/pass, auto-exit after calm (60m). Verification
+  NEVER weakens (priority is order, not trust).
+- Multi-admin editorial intake (app/editorial/intake.py): long-poll getUpdates
+  with persisted offset; numeric-user_id auth (bot_admins, migration 019);
+  text/forward/photo/video/album/document submissions -> RawItem held
+  (activation_ok=0) until an editor approves via preview buttons; then the
+  SAME canonical pipeline (dedup->event->verification->story->publish).
+  Forwards map known canonical identities; unknown origins never add
+  independent confirmations. Media = Telegram file_id only, zero binaries.
+  Feature flag EDITORIAL_BOT_INTAKE_ENABLED (deployed ON after healthy
+  flag-off verification); owner bootstrapped from safe config (5504556066).
+- Tests 370/370 (iran_policy 5 + editorial intake 10); governance PASS.
+
 ## 2026-10-04 24/7 full-source coverage + diversity (owner directive)
 - Registry reconciled with rasteh_external_sources_iran_2026.xlsx: 78/78
   canonical entities already live; 106/171 endpoints URL-exact; all 67

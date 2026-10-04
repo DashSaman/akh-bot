@@ -43,6 +43,7 @@ from app.newsroom.story_evolution import build_v2_content, render_v2_public_text
 from app.newsroom.translator import needs_translation_for, translate_event_sync
 from app.publishing.telegram_bot import is_persian_public_text
 from app.newsroom.diversity import defer_for_diversity, story_source_identities
+from app.newsroom.iran_policy import crisis_active, defer_for_iran_capacity
 from app.verification.gates import (    classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk, priority_tier,
 )
 
@@ -55,6 +56,7 @@ _MAX_CONTINUATION_MIN = max(CONTINUATION_MINUTES.values())
 # THRASH-FIX: max fresh translations per pipeline pass — keeps a saturated
 # free-tier AI pool from being burned on retry loops (backoff column below).
 _TRANSLATE_BUDGET_PER_PASS = 6
+_TRANSLATE_BUDGET_CRISIS = 12  # A4: IRAN_CRISIS_MODE concentrates capacity
 
 
 def _translation_gate(db, event_id: int, summary: dict) -> str | None:
@@ -64,7 +66,9 @@ def _translation_gate(db, event_id: int, summary: dict) -> str | None:
     row = db.execute("SELECT translate_attempts a, next_translate_at n FROM events WHERE id=?",
                      (event_id,)).fetchone()
     next_at = (row["n"] or "") if row else ""
-    if summary.get("translations", 0) >= _TRANSLATE_BUDGET_PER_PASS:
+    if summary.get("translations", 0) >= (_TRANSLATE_BUDGET_CRISIS
+                                          if crisis_active(db)
+                                          else _TRANSLATE_BUDGET_PER_PASS):
         return "budget"
     if next_at and next_at > now_iso:
         return "backoff"
@@ -612,6 +616,13 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
             # (translated content already passed; raw foreign NEVER reaches here)
             EventsRepo(db).set_status(event["id"], "HELD")
             log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (final gate)", event["id"])
+            return
+        if defer_for_iran_capacity(db, content["headline"], weight):
+            EventsRepo(db).set_status(event["id"], "READY")
+            summary["iran_capacity_deferred"] = summary.get(
+                "iran_capacity_deferred", 0) + 1
+            log.info("V2 IRAN_CAPACITY_DEFER event %s (soft allocation, retried)",
+                     event["id"])
             return
         if defer_for_diversity(db, event["id"], weight,
                                alternatives_ready=_ready_alternatives(db, event["id"])):

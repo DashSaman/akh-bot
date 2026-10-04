@@ -97,6 +97,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 loop.create_task(scheduler.watchdog_loop(), name="watchdog"),
                 loop.create_task(_telethon_task(db, settings), name="telethon"),
             ]
+            # E1: editorial intake poller — feature-flagged, OFF by default;
+            # bootstrap_owner seeds the OWNER row from safe config (E3).
+            if getattr(settings, "editorial_bot_intake_enabled", False):
+                from app.editorial.intake import EditorialIntake, bootstrap_owner
+                try:
+                    bootstrap_owner(db, settings)
+                    tasks.append(loop.create_task(
+                        EditorialIntake(db, settings).loop(), name="editorial"))
+                    log.info("editorial intake worker started")
+                except Exception:  # noqa: BLE001 — never block production
+                    log.exception("editorial intake failed to start (ignored)")
             log.info("workers started (ingest/pipeline/jobs)")
         try:
             yield

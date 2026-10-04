@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     telegram_publish_chat_id: str = ""  # REAL public news channel (type=channel, validated)
     telegram_staging_chat_id: str = ""   # optional staging/test chat
     telegram_admin_chat_id: str = ""     # optional owner alerts chat
+    newsroom_owner_telegram_id: str = ""    # E3: numeric owner user id
+    editorial_bot_intake_enabled: bool = False  # E1: flag OFF by default
+    iran_crisis_calm_minutes: int = 60       # A4: auto-exit after calm
     telegram_news_chat_id: str = ""      # legacy alias → publish (being retired)
 
     max_provisional_posts_per_hour: int = 6

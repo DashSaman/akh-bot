@@ -76,6 +76,14 @@ class Scheduler:
                 try:
                     _publication_stall_check(self.db)
                     _diversity_and_starvation_check(self.db)
+                    try:
+                        from app.newsroom.iran_policy import update_crisis_mode
+                        update_crisis_mode(
+                            self.db,
+                            calm_minutes=int(getattr(
+                                self.settings, "iran_crisis_calm_minutes", 60)))
+                    except Exception:  # noqa: BLE001
+                        pass
                 except Exception:  # noqa: BLE001
                     log.exception("stall check failed")
             except Exception:  # noqa: BLE001
