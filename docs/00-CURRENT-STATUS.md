@@ -6,6 +6,7 @@ One current truth. History lives in git.
 - **Production runtime SHA:** c674510 (deployed, healthy; CI green on this SHA)
 - **Governance:** PASS — 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
 - **Parts:** PART 1 = PASS - PART 2 = BLOCKED_EXTERNAL - PART 3 = PASS - PART 4 = PASS - PART 5 = PASS - PART 6 = PASS - PART 7 = PASS - PART 8 = BLOCKED_EXTERNAL - PART 9 = PASS - PART 10 = PASS
+- **Publication ledger SENT: **474**** (live ledger; edits never count)
 - **Tests:** 414/414 (clean GitHub checkout: compileall + pytest + governance + docker build)
 
 ## Scope (FINAL, frozen)
