@@ -75,6 +75,7 @@ class Scheduler:
                 # fires when only foreign/HELD items arrived (fa filter).
                 try:
                     _publication_stall_check(self.db)
+                    _diversity_and_starvation_check(self.db)
                 except Exception:  # noqa: BLE001
                     log.exception("stall check failed")
             except Exception:  # noqa: BLE001
@@ -234,6 +235,57 @@ def _publication_stall_check(db) -> None:
     from app.db.repo import SettingsRepo as _S
     _S(db).set("PUBLICATION_PIPELINE_STALLED", _json.dumps(diag, ensure_ascii=False))
     log.warning("PUBLICATION_PIPELINE_STALLED: %s", diag)
+
+
+def _diversity_and_starvation_check(db) -> None:
+    """Directive 2026-10-04: soft anti-monopoly diagnostics.
+
+    SOURCE_MONOPOLY_DETECTED — one canonical identity >50% of new posts in the
+    rolling hour while >=5 other identities have publishable stories.
+    SOURCE_STARVATION — an active source delivered >=5 fresh eligible items in
+    the last 2h that never linked to ANY event (not dedup — orphaned).
+    Both WARN and diagnose; neither ever blocks publication by itself.
+    """
+    import json as _json
+    from datetime import datetime, timedelta, timezone
+    from app.db.repo import SettingsRepo as _S
+    from app.newsroom.diversity import diversity_metrics
+    now = datetime.now(timezone.utc)
+    m1 = diversity_metrics(db, hours=1)
+    # publishable stories per identity (never-sent DRAFT stories)
+    rows = db.query(
+        "SELECT e.id AS eid FROM stories st JOIN events e ON e.id = st.event_id"
+        " WHERE st.status='DRAFT' AND NOT EXISTS ("
+        "  SELECT 1 FROM publications p WHERE p.story_id = st.id AND p.status='SENT')")
+    waiting_idents = set()
+    from app.newsroom.diversity import story_source_identities
+    for r in rows:
+        waiting_idents |= story_source_identities(db, r["eid"])
+    monopoly = False
+    if m1["total_new_posts"] >= 4 and m1["top"]:
+        top = m1["top"][0]
+        others = len(waiting_idents - {top["identity"]})
+        if top["share"] > 0.50 and others >= 5:
+            monopoly = True
+            diag = {"metrics_1h": m1, "waiting_identities": sorted(waiting_idents)[:12]}
+            _S(db).set("SOURCE_MONOPOLY_DETECTED", _json.dumps(diag, ensure_ascii=False))
+            log.warning("SOURCE_MONOPOLY_DETECTED: %s", diag)
+    if not monopoly:
+        _S(db).set("SOURCE_MONOPOLY_DETECTED", "")
+    # starvation: fresh eligible items never linked to any event
+    since2h = (now - timedelta(hours=2)).isoformat(timespec="seconds")
+    orphan = db.query(
+        "SELECT s.id sid, COALESCE(NULLIF(s.identity,''), s.name) ident, COUNT(*) c"
+        " FROM raw_items ri JOIN sources s ON s.id = ri.source_id"
+        " WHERE ri.activation_ok = 1 AND ri.fetched_at >= ?"
+        " AND NOT EXISTS (SELECT 1 FROM event_items ei WHERE ei.raw_item_id = ri.id)"
+        " GROUP BY s.id HAVING c >= 5 ORDER BY c DESC LIMIT 5", (since2h,))
+    if orphan:
+        diag = [{"source": o["ident"], "orphaned_eligible_items": o["c"]} for o in orphan]
+        _S(db).set("SOURCE_STARVATION", _json.dumps(diag, ensure_ascii=False))
+        log.warning("SOURCE_STARVATION: %s", diag)
+    else:
+        _S(db).set("SOURCE_STARVATION", "")
 
 
 def _SR_marker_clear(db) -> None:

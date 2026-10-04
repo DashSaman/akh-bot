@@ -42,7 +42,8 @@ from app.newsroom.source_context import resolve_context
 from app.newsroom.story_evolution import build_v2_content, render_v2_public_text
 from app.newsroom.translator import needs_translation_for, translate_event_sync
 from app.publishing.telegram_bot import is_persian_public_text
-from app.verification.gates import (    classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk,
+from app.newsroom.diversity import defer_for_diversity, story_source_identities
+from app.verification.gates import (    classify_priority, decide_claim_state, event_can_auto_publish, is_high_risk, priority_tier,
 )
 
 log = logging.getLogger("akh.pipeline.v2")
@@ -377,9 +378,33 @@ def _last_sent(db, story_id: int, platform: str = "telegram") -> dict | None:
         " ORDER BY id DESC LIMIT 1", (story_id, platform))
 
 
+def _ready_alternatives(db, event_id: int) -> int:
+    """Publishable stories from identities OTHER than this event's (soft
+    fairness only applies when alternatives genuinely exist)."""
+    mine = story_source_identities(db, event_id)
+    rows = db.query(
+        "SELECT e.id AS eid FROM stories st JOIN events e ON e.id = st.event_id"
+        " WHERE st.status='DRAFT' AND NOT EXISTS ("
+        "  SELECT 1 FROM publications p WHERE p.story_id = st.id AND p.status='SENT')")
+    alt = 0
+    seen = set()
+    for r in rows:
+        if r["eid"] in seen:
+            continue
+        seen.add(r["eid"])
+        idents = story_source_identities(db, r["eid"])
+        if idents and not (idents & mine):
+            alt += 1
+    return alt
+
+
 def _enqueue_send(db, settings, story_id: int, text: str, ph: str, pub_id: int,
                   lifecycle: str, media: str = "") -> None:
-    priority = 100 if lifecycle in ("PROVISIONAL", "CONFIRMED") else 60
+    base = 100 if lifecycle in ("PROVISIONAL", "CONFIRMED") else 60
+    hrow = db.query_one("SELECT headline FROM stories WHERE id=?", (story_id,))
+    _topic, _w = classify_priority((hrow or {}).get("headline", ""))
+    # Iran-first story priority bumps queue ORDER only (never trust/caps)
+    priority = base + {"P0": 10, "P1": 6, "P2": 3, "P3": 0}[priority_tier(_w)]
     JobsRepo(db).enqueue(
         "publish_send",
         {"story_id": story_id, "platform": "telegram", "payload_hash": ph,
@@ -588,6 +613,13 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
             EventsRepo(db).set_status(event["id"], "HELD")
             log.info("V2 NEEDS_LANGUAGE_PROCESSING event %s (final gate)", event["id"])
             return
+        if defer_for_diversity(db, event["id"], weight,
+                               alternatives_ready=_ready_alternatives(db, event["id"])):
+            EventsRepo(db).set_status(event["id"], "READY")
+            summary["diversity_deferred"] = summary.get("diversity_deferred", 0) + 1
+            log.info("V2 DIVERSITY_DEFER event %s (soft fairness, retried next pass)",
+                     event["id"])
+            return
         draft = {"headline": content["headline"], "lead": content["lead"],
                  "details": content["details"], "source_names": src_names,
                  "platform_variants": {"telegram": text}, "generation_mode": "DETERMINISTIC",
@@ -610,6 +642,11 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
     if sent is None:
         # never published: first SEND (publish_send guard forbids a second)
         if not ok or not is_persian_public_text(text):
+            return
+        _tw, _weight2 = classify_priority(content["headline"])
+        if defer_for_diversity(db, event["id"], _weight2,
+                               alternatives_ready=_ready_alternatives(db, event["id"])):
+            summary["diversity_deferred"] = summary.get("diversity_deferred", 0) + 1
             return
         current = stories.get(story["id"])
         if current["headline"] != content["headline"] or current["lead"] != content["lead"]:

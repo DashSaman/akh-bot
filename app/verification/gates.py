@@ -81,6 +81,19 @@ _TOPIC_WEIGHTS = {
     "ENTERTAINMENT": (15, ["سلبریتی", "بازیگر", "سینما", "موسیقی", "کنسرت", "تفریحی", "celebrity",
                            "فیلم", "سریال", "شو", "استیج"]),
 }
+def priority_tier(weight: int) -> str:
+    """Iran-first story priority (directive 2026-10-04): P0 Iran-critical
+    (war/security/nuclear/sanctions/internet/currency/diplomacy), P1 regional,
+    P2 relevant world, P3 other. ORDER only — never verification trust."""
+    if weight >= 88:
+        return "P0"
+    if weight >= 75:
+        return "P1"
+    if weight >= 60:
+        return "P2"
+    return "P3"
+
+
 _LOW_TOPICS = {"SPORT", "ENTERTAINMENT"}
 
 

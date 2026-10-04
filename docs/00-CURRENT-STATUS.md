@@ -47,6 +47,27 @@ sends now drip under the genuine daily cap (120/24h reached by real volume).
   auth; Kiro OAuth+IDE-only. provider_bench digit check now normalizes
   Persian/Arabic digits (cf/mistral-small + cohere/command-a actually PASS).
 
+## 2026-10-04 24/7 full-source coverage + diversity (owner directive)
+- Registry reconciled with rasteh_external_sources_iran_2026.xlsx: 78/78
+  canonical entities already live; 106/171 endpoints URL-exact; all 67
+  X/TruthSocial endpoints registered truthfully (X = LIMITED_X_ACCESS, no
+  paid API; Truth Social RSS is Cloudflare-blocked server-side).
+- Soft diversity scheduler (app/newsroom/diversity.py): canonical-identity
+  rolling-hour caps (25% single / 45% top-two) defer ONLY dominant identities
+  when alternative identities have publishable stories; P0 breaking weight
+  and breaking-flagged sources always pass; deferral = retry next pass,
+  nothing dropped or censored.
+- Iran-first story priority (gates.priority_tier P0-P3) bumps job-queue ORDER
+  only — verification trust, caps and dedupe untouched. Speed priority
+  (NAYA/Yashar) never increases trust: single-source high-risk still HELD,
+  low/medium single-source still publishes PROVISIONAL (verified live).
+- Watchdog: SOURCE_MONOPOLY_DETECTED (>50% share + >=5 waiting identities)
+  and SOURCE_STARVATION (>=5 fresh eligible items never linked to any event)
+  — warn/diagnose only, never auto-block.
+- Tests: tests/test_diversity.py (8) — same-identity-once, defer semantics,
+  breaking exception, small-sample, order-not-trust, Iran-P0-beats-P3,
+  metrics shape, monopoly+starvation detection.
+
 ## 2026-10-04 14:1xZ coverage follow-up (owner directives)
 - MAX_POSTS_PER_DAY 120->240 (.env; hourly 30 stays as burst guard) — the
   trailing-24h window had genuinely filled with real posts and new sends
