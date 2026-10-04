@@ -103,6 +103,7 @@ CEREMONY_PATTERNS = (
     re.compile(r"پیام تبریک|تبریک به مناسبت|پیام تسلیت رسمی متن"),
     re.compile(r"مراسم یادبود|جلسه تشریفاتی|دیدار تودیع"),
     re.compile(r"سفیر جدید"),  # credential-presenting context
+    re.compile(r"جشن روز ملی|روز ملی|مناسبت روز ملی"),
 )
 CEREMONY_ESCAPE = re.compile("|".join(MATERIAL_KEYWORDS))
 
