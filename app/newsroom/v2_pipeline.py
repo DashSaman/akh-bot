@@ -227,7 +227,8 @@ def _find_same_claim_event(db, claim, occurred: str) -> int | None:
     or a near-identical paraphrase — of an existing one joins that claim's
     event and never creates a duplicate one. Exact structural fingerprints
     match regardless of age (cheap equality); lexical near-dups are bounded."""
-    from app.newsroom.claim_compare import _STOP, _jaccard, _tokens, compare
+    from app.newsroom.claim_compare import (_STOP, _jaccard, _tokens,
+    _content_overlap, compare)
 
     def _content_toks(t: str) -> set:
         return _tokens(t) - _STOP
@@ -247,11 +248,20 @@ def _find_same_claim_event(db, claim, occurred: str) -> int | None:
     for row in rows:
         ex = _claim_row_to_structured(row)
         decision = compare(claim, ex).decision
-        if decision in ("SAME_CLAIM", "POTENTIAL_CONTRADICTION"):
-            # SAME: paraphrase joins its event; CONTRADICTION: a differing
-            # figure/negation about the same happening joins the event it
-            # contradicts — the conflict is preserved and traced, never merged
+        if decision == "SAME_CLAIM":
+            # paraphrase/exact fingerprint — joins its event
             return int(row["eid"])
+        if decision == "POTENTIAL_CONTRADICTION":
+            # A contradiction belongs to the SAME event only when both claims
+            # are about the same subject. ACTOR_DIFFERS alone fires for ANY
+            # two actor-bearing claims, which merged textually unrelated
+            # news into mega-events (blackhole regression 2026-10-04:
+            # 620/347/301-item events swallowed the stream). Require lexical
+            # proximity: "same story, conflicting detail".
+            jc = _jaccard(_tokens(claim.text), _tokens(ex.text))
+            if jc >= 0.40 and _content_overlap(claim.text, ex.text) >= 3:
+                return int(row["eid"])
+            continue
         if decision == "AMBIGUOUS_CLAIM" \
                 and _jaccard(item_toks, _content_toks(row["text"])) >= 0.6:
             return int(row["eid"])
