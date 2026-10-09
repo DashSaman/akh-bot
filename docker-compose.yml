@@ -15,6 +15,7 @@ services:
       - "127.0.0.1:8307:8000"   # localhost-only bind; expose later via existing reverse proxy
     volumes:
       - akhbot_data:/data
+      - ./config/brand.yml:/srv/config/brand.yml:ro
     networks:
       - akhbot_internal
     logging:
