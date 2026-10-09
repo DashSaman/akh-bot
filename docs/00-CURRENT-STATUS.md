@@ -1,5 +1,12 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH (release-freeze 2026-10-04, v1.0.0-telegram)
 
+## 2026-10-09 Rasteh publication template hotfix / اصلاح قالب راسته
+- Production image omitted the owner's decided `config/brand.yml`; restored the runtime file and added read-only brand bind mounts to docker-run and compose. Preview-brand signatures are blocked both during rendering and immediately before Telegram API publication.
+- Backfilled 87 unique @RastehNews messages with stale preview footers by editing existing message IDs. Original text versions are backed up under `/data/backups/`.
+- Corrected repeated headline/lead formatting and removed source-channel promotional boilerplate. The repair script supports a separate duplicate-only mode for older posts.
+- فارسی: قالب اصلی «راسته؟» بازگردانده شد، انتشار امضای آزمایشی متوقف شد و ۸۷ پیام قبلی بدون ایجاد پست تازه ویرایش شدند.
+
+
 One current truth. History lives in git.
 
 - **Repository HEAD:** c674510
