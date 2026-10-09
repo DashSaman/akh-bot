@@ -22,3 +22,9 @@
 ```
 - HTML امن (`<b>`، escape کامل)؛ هرگز `**` خام؛ پانویس دقیقاً یک‌بار؛ فرمت رسانه: sendPhoto/sendVideo با همین کپشن (کپشن هم از GATE-08 می‌گذرد).
 - تأییدِ provisional → ویرایش همان پیام، تبدیل 🔴→🟢، بدون پست دوم (INV-012/013).
+- خطای قالب ۲۰۲۶-۱۰-۰۹: بارگذاری فایل واقعی `config/brand.yml` در کانتینر الزامی است؛ عبارت پیش‌نمایش/برند نامعلوم هرگز نباید به کانال عمومی راه پیدا کند. اگر تیتر کوتاه‌شده با «…» و لید کامل از یک عبارت شروع شوند، یک نسخه کامل نگه داشته شود، نه دو تکرار. تبلیغ منبع نیز حذف می‌شود.
+
+## English — Telegram publishing invariants
+- Mount the owner's `config/brand.yml` into `/srv/config/brand.yml` for every deployment; reject unresolved preview-brand signatures before rendering public Telegram content.
+- Collapse a truncated headline duplicated by a longer lead without dropping factual words. Do not republish posts to fix format; edit the existing Telegram message ID and retain an original-content backup.
+- Never touch other server projects while repairing this channel.
