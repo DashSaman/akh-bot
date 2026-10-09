@@ -46,6 +46,7 @@ docker run -d \
   --env-file "$APP_DIR/.env" \
   -e DATA_DIR=/data \
   -v "$VOL:/data" \
+  -v "$APP_DIR/app/config/brand.yml:/srv/config/brand.yml:ro" \
   --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 \
   --health-cmd "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=4).status==200 else 1)\"" \
   --health-interval 30s --health-timeout 5s --health-retries 3 \
