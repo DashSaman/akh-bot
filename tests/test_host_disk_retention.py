@@ -59,3 +59,32 @@ def test_dry_run_never_executes_deletes(monkeypatch):
     monkeypatch.setattr(m, "candidate_releases", lambda: iter(()))
     monkeypatch.setattr(m, "candidate_images", lambda: iter(()))
     assert m.RETENTION_DAYS == 5
+
+
+def test_old_dr_volume_cleanup_keeps_newest(monkeypatch):
+    from types import SimpleNamespace
+    from datetime import datetime, timezone, timedelta
+
+    old = (datetime.now(timezone.utc)-timedelta(days=10)).isoformat()
+    names = ("akhbot_dr_20261003T175910Z\n"
+             "akhbot_dr_20261003T180007Z\n")
+    def fake_command(args, timeout=30):
+        if args[:3] == ["docker", "volume", "ls"]:
+            return SimpleNamespace(returncode=0, stdout=names)
+        if args[:3] == ["docker", "ps", "-aq"]:
+            return SimpleNamespace(returncode=0, stdout="")
+        if args[:3] == ["docker", "volume", "inspect"]:
+            return SimpleNamespace(returncode=0, stdout=old)
+        raise AssertionError(f"unexpected operation {args!r}")
+    monkeypatch.setattr(m, "command", fake_command)
+    candidates = list(m.candidate_dr_volumes())
+    assert candidates == [("old-dr-volume", Path("akhbot_dr_20261003T175910Z"))]
+
+
+def test_dr_volume_names_are_strict():
+    import re
+    pattern = r"akhbot_dr_\d{8}T\d{6}Z"
+    assert re.fullmatch(pattern, "akhbot_dr_20261003T175910Z")
+    assert not re.fullmatch(pattern, "akhbot_data")
+    assert not re.fullmatch(pattern, "twoid_postgres")
+    assert not re.fullmatch(pattern, "../../containerd")

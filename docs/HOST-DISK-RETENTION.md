@@ -122,3 +122,14 @@ retention further without a project-by-project recovery audit.
 - systemd units were verified, timer enabled and active. Manual service execution completed Result=success / ExecMainStatus=0. Next automatic run is daily at 03:40 UTC plus 0–10 minutes randomized delay.
 - Source and installed Python script SHA256 matched at installation. Host baseline: /opt/akhbot/audit/host-disk-20261012, directory protected root-only.
 - The 5-day rule is only for safe rotated logs, expired disposable temp and explicitly allowlisted unused rollback artifacts; never globally prune Docker or delete Android/containerd/DB data.
+
+## Rasteh disaster-recovery test volumes
+The host also held three *unmounted* DR-test Docker volumes from 2026-10-03,
+named with strict akhbot_dr_YYYYMMDDTHHMMSSZ prefixes. The latest snapshot
+(akhbot_dr_20261003T180007Z) contains a SQLite backup with integrity_check=ok;
+it is kept. Two older unreferenced DR-test volumes were removed by exact name
+(no global volume prune), freeing about 16 MiB. Daily maintenance now checks
+ONLY this exact Rasteh DR naming scheme, retains the newest restore point
+regardless of age, and refuses to touch a volume mounted by any running OR
+stopped Docker container. Live akhbot_data, PVNetwork/GrowthOS/TwoID volumes
+and all database backups are outside this cleanup rule.
