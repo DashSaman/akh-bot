@@ -71,6 +71,7 @@ def test_dry_run_calls_no_mutations(tmp_path,monkeypatch,capsys):
         monkeypatch.setattr(m,name,lambda:iter(()))
     monkeypatch.setattr(m,"LOCK_PATH",tmp_path/"lock")
     monkeypatch.setattr(m,"AUDIT_PATH",tmp_path/"audit.jsonl")
+    monkeypatch.setattr(m,"BACKUP_ROOT",tmp_path/"missing-backups")
     monkeypatch.setattr(m,"apply",lambda *args:pytest.fail("dry-run deleted"))
     monkeypatch.setattr(m,"housekeeping",lambda:pytest.fail("dry-run housekeeping"))
     assert m.main([])==0
@@ -122,6 +123,7 @@ def test_audit_symlink_aborts_before_any_delete(tmp_path,monkeypatch):
     foreign=tmp_path/"foreign-audit"; foreign.write_text("preserve")
     audit=tmp_path/"audit";audit.symlink_to(foreign)
     monkeypatch.setattr(m,"AUDIT_PATH",audit)
+    monkeypatch.setattr(m,"BACKUP_ROOT",tmp_path/"missing-backups")
     monkeypatch.setattr(m,"LOCK_PATH",tmp_path/"lock")
     monkeypatch.setattr(m,"candidate_temp",lambda:iter([("temp",p)]))
     for name in ("candidate_logs","candidate_backups","candidate_artifacts","candidate_images","candidate_dr_volumes"):
