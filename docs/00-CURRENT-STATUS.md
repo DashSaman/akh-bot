@@ -1,4 +1,16 @@
-# 00-CURRENT-STATUS — RUNTIME TRUTH (release-freeze 2026-10-04, v1.0.0-telegram)
+# 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
+
+## 2026-10-12 independent reconciliation / FCC decision
+- GitHub/main and server main reached the **same source Git tree** at source-sync commit 363ba05a, with all 15 formerly local-only commits and reviewed tracked/untracked hotfixes preserved. The original 15-commit head remains under archive/rasteh-server-pre-sync-20261012; dirty-state backup at /opt/akhbot/backups/rasteh-sync-20261012T0048Z.
+- GitHub CI for 363ba05a: **GREEN** (test and Docker jobs). Isolated worktree suite: **483 passed**; governance: **59 DONE / 2 BLOCKED_EXTERNAL**.
+- This is **source parity**, not proof of the *running Docker image SHA*: the existing akhbot-app:liveblog-20261009 image is healthy but has no immutable Git revision label. No service restart/deployment took place as part of this source reconciliation.
+- Read-only runtime audit: DB integrity OK, 3,793 historical SENT ledger records, no pending jobs, no failed jobs in last 6 hours (two in 24 hours), and most recent observed SEND remote_id=2187 at 2026-10-11T13:05Z. Observations are point-in-time, not continuous guarantees.
+- Translation backlog inventory: 172 active backoffs and 1,915 events with historical attempts; do not blindly requeue old or HELD events.
+- Free Claude Code (FCC) source reviewed, **not installed/deployed**: Python 3.14.7 requirement; AGPL-3.0-only; model catalog mixes free, paid and subscription routes. Controlled no-DB 9Router probes: ZAI Arabic one fixture PASS (~19s); Groq English and Cloudflare Hebrew HTTP 503; Qwen Arabic lost uncertainty. **No new provider qualified or promoted**. See docs/research/FCC-ZERO-COST-TRANSLATION-2026-10-12.md and scripts/benchmark_zero_cost_translation.py.
+- Host disk at audit **95% used**: do not deploy/build additional production images or prune global Docker resources without a scoped space/safety plan. All unrelated shared-host services remained untouched.
+- Product publication scope remains **Telegram @RastehNews ONLY**, no paid X/social publishing.
+
+## Historical release checkpoint — 2026-10-04 to 2026-10-09
 
 ## Emergency public-format hotfix — 2026-10-09 / اصلاح اضطراری قالب عمومی
 - Production `akhbot-app` omitted the owner's decided `config/brand.yml`, resulting in the stale «پیش‌نمایش سکوی خبری» footer. Restored runtime config, added a persistent brand-config mount to docker-run/compose, and fail-closed public-brand checks.
@@ -7,10 +19,10 @@
 - فارسی: فایل برند اصلی به کانتینر بازگردانده شد؛ امضای آزمایشی ممنوع شد، ۸۷ پیام قبلی در همان شناسه ویرایش شدند و اصلاح تکرار متن خبر به قالب اضافه شد.
 
 
-One current truth. History lives in git.
+The following lines are the historical 2026-10-06 freeze values, not today's runtime source of truth. History and later fixes are preserved in Git.
 
-- **Repository HEAD:** edd819a (deployed code commit; docs-only follow-up may be newer)
-- **Production runtime SHA:** edd819a (deployed healthy 2026-10-06)
+- **Repository HEAD (historical):** edd819a (deployed code commit; docs-only follow-up may be newer)
+- **Production runtime SHA (historical):** edd819a (deployed healthy 2026-10-06)
 - **Governance:** PASS — 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
 - **Parts:** PART 1 = PASS - PART 2 = BLOCKED_EXTERNAL - PART 3 = PASS - PART 4 = PASS - PART 5 = PASS - PART 6 = PASS - PART 7 = PASS - PART 8 = BLOCKED_EXTERNAL - PART 9 = PASS - PART 10 = PASS
 - **Publication ledger SENT: **474**** (historical freeze snapshot; live ledger may be higher)
