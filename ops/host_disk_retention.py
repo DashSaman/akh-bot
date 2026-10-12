@@ -1,302 +1,295 @@
 #!/usr/bin/env python3
-"""Safe shared-host disk housekeeping. Dry-run by default; --apply for timer.
-
-Never prunes Docker globally, touches volumes/DB/snapshots/containerd stores,
-truncates active logs, restarts services, or changes host networking.
-"""
+"""Rasteh-only retention. Dry-run by default; no global prune or service restart."""
 from __future__ import annotations
-import argparse
-import datetime as datetime
-import json
-import os
-import pathlib
-import re
-import shutil
-import stat
-import subprocess
-import sys
+import argparse, datetime, fcntl, json, os, pathlib, re, shutil, sqlite3, stat, subprocess, sys
 
 RETENTION_DAYS = 5
-CUTOFF = (datetime.datetime.now(datetime.timezone.utc) -
-          datetime.timedelta(days=RETENTION_DAYS)).timestamp()
+CUTOFF = (datetime.datetime.now(datetime.timezone.utc)-datetime.timedelta(days=5)).timestamp()
+DATA_ROOT = pathlib.Path("/var/lib/docker/volumes/akhbot_data/_data")
+BACKUP_ROOT = DATA_ROOT/"backups"
 ROOTS_TEMP = (pathlib.Path("/tmp"), pathlib.Path("/var/tmp"))
-TEMP_PREFIX = ("tmp", "pytest", "pip-", "ghchk", "relchk", "cleanchk", "node-compile-cache")
-TEMP_EXCLUDE = ("systemd-private-", "android", "ssh-", "hsperfdata",
-                ".X11", ".ICE", "xray", "pv-", "docker-", "containerd")
-ARCHIVED_LOG = re.compile(r"(?:\.\d+(?:\.gz)?|\.gz|\.old|\.bak)$", re.I)
-RELEASE_DIR = pathlib.Path("/opt/pv-growth/releases")
-RELEASE_NAME = re.compile(r"[a-f0-9]{40}")
-IMAGE_KEEP = {"pv-growth-app": 4, "akhbot-app": 3, "akhbot-qa-watch": 2}
+TEMP_NAMES = {"cleanchk", "cleanchk2", "ghchk", "relchk"}
+TEMP_LOG = re.compile(r"(?:rasteh|akhbot)[-_][A-Za-z0-9_.-]+\.(?:log|tmp|part|exit)")
+ARTIFACTS = tuple(pathlib.Path("/opt/akhbot")/x for x in ("drill-013","drill-014","shadow-p3","dr-20261003T175910Z","dr-20261003T175923Z","dr-src.db")) + (DATA_ROOT/"media-cache",)
+LOG_ROOTS = (pathlib.Path("/var/log/apache2"),pathlib.Path("/var/log/x-ui"))
+APACHE_LOG = re.compile(r"(?:rasteh|akhbot)[_-](?:access|error)\.log\.\d+(?:\.gz)?")
+XUI_LOG = re.compile(r"3xui-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.\d+\.log\.gz")
+DB_BACKUP = re.compile(r"(?:akhbot-\d{8}T\d{6}Z|pre-[A-Za-z0-9_-]+-\d{8}T\d{6}Z)\.db")
+OTHER_BACKUP = re.compile(r"rasteh_(?:footer|duplicate)_\d{8}_originals\.json")
+DR_NAME = re.compile(r"akhbot_dr_\d{8}T\d{6}Z")
+IMAGE_KEEP = {"akhbot-app": 2, "akhbot-qa-watch": 2}
+LOCK_PATH = pathlib.Path("/run/lock/rasteh-host-disk-maintenance.lock")
+AUDIT_PATH = DATA_ROOT/"reports/disk-maintenance.jsonl"
 
 def command(argv, timeout=30):
-    return subprocess.run(argv, text=True, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, timeout=timeout, check=False)
+    return subprocess.run(argv,text=True,capture_output=True,timeout=timeout,check=False)
 
-_OPEN_FILES = None
+def clean_path(p):
+    p = pathlib.Path(p)
+    return p.is_absolute() and ".." not in p.parts and not any(x.is_symlink() for x in (p,*p.parents))
 
 def open_file(p):
-    """Cache open /proc fd targets for fast read-only liveness checks."""
-    global _OPEN_FILES
-    if _OPEN_FILES is None:
-        targets = set()
-        try:
-            for proc in pathlib.Path("/proc").iterdir():
-                if not proc.name.isdigit():
-                    continue
-                fds = proc / "fd"
-                try:
-                    files = list(fds.iterdir())
-                except (PermissionError, FileNotFoundError, NotADirectoryError):
-                    continue
-                for fd in files:
+    """Fresh fd/cwd/root/mmap scan, including container paths via /proc."""
+    try:
+        nodes=[p]
+        if p.is_dir():
+            for base,dirs,files in os.walk(p,followlinks=False):
+                nodes.extend(pathlib.Path(base)/n for n in dirs+files)
+                if len(nodes)>30000: return True
+        targets={(s.st_dev,s.st_ino) for s in (n.stat() for n in nodes)}
+        for proc in pathlib.Path("/proc").iterdir():
+            if not proc.name.isdigit(): continue
+            try:
+                refs=list((proc/"fd").iterdir())+[proc/"cwd",proc/"root"]
+                for ref in refs:
                     try:
-                        target = os.readlink(fd)
-                        if target.startswith("/"):
-                            targets.add(target.removesuffix(" (deleted)"))
-                    except (PermissionError, FileNotFoundError, OSError):
-                        continue
-        except OSError:
-            return True  # fail closed
-        _OPEN_FILES = targets
-    path = str(p)
-    if p.is_dir():
-        return any(t == path or t.startswith(path + "/") for t in _OPEN_FILES)
-    return path in _OPEN_FILES
+                        st=ref.stat()
+                        if (st.st_dev,st.st_ino) in targets: return True
+                        name=os.readlink(ref).removesuffix(" (deleted)")
+                        if p.is_dir() and (name==str(p) or name.startswith(str(p)+"/")): return True
+                    except FileNotFoundError: continue
+                # Mapping inodes also protect already-closed memory-mapped files.
+                for line in (proc/"maps").read_text().splitlines():
+                    fields=line.split(None,5)
+                    major,minor=fields[3].split(":")
+                    if (os.makedev(int(major,16),int(minor,16)),int(fields[4])) in targets:
+                        return True
+            except (FileNotFoundError,ProcessLookupError): continue
+        return False
+    except (OSError,ValueError): return True  # fail closed on incomplete visibility
+
+def mount_points():
+    """Mountinfo also detects bind mounts on the same filesystem."""
+    rows=pathlib.Path("/proc/self/mountinfo").read_text().splitlines()
+    return {pathlib.Path(re.sub(r"\\([0-7]{3})",lambda m:chr(int(m[1],8)),row.split()[4])) for row in rows}
 
 def safe_tree(p):
-    """No fresh children, symlinks, mounts, special files or open files."""
     try:
-        if p.is_symlink() or os.path.ismount(p) or open_file(p):
-            return False
-        nodes = [p]
+        if not clean_path(p) or os.path.ismount(p): return False
+        if any(m==p or p in m.parents for m in mount_points()): return False
+        root_stat=p.lstat()
+        nodes=[p]
         if p.is_dir():
-            nodes.extend(p.rglob("*"))
-        if len(nodes) > 30000:
-            return False
-        for x in nodes:
-            st = x.lstat()
-            if x.is_symlink() or not (stat.S_ISDIR(st.st_mode) or stat.S_ISREG(st.st_mode)):
-                return False
-            if max(st.st_mtime, st.st_ctime) > CUTOFF:
-                return False
-        return True
-    except (OSError, PermissionError):
-        return False
+            for base,dirs,files in os.walk(p,followlinks=False):
+                nodes.extend(pathlib.Path(base)/x for x in dirs+files)
+                if len(nodes)>30000: return False
+        for node in nodes:
+            s=node.lstat()
+            if node.is_symlink() or os.path.ismount(node) or s.st_dev!=root_stat.st_dev: return False
+            if not (stat.S_ISDIR(s.st_mode) or stat.S_ISREG(s.st_mode)): return False
+            if stat.S_ISREG(s.st_mode) and s.st_nlink!=1: return False
+            if max(s.st_mtime,s.st_ctime)>=CUTOFF: return False
+        return not open_file(p)
+    except OSError: return False
+
+def temp_allowed(p):
+    return p.parent in ROOTS_TEMP and (p.name in TEMP_NAMES or TEMP_LOG.fullmatch(p.name))
+
+def log_allowed(p):
+    return (p.parent==LOG_ROOTS[0] and APACHE_LOG.fullmatch(p.name)) or (
+        p.parent==LOG_ROOTS[1] and XUI_LOG.fullmatch(p.name))
 
 def candidate_temp():
-    for base in ROOTS_TEMP:
-        if not base.is_dir():
-            continue
-        for p in base.iterdir():
-            if p.name.startswith(TEMP_EXCLUDE):
-                continue
-            allowed = p.name.startswith(TEMP_PREFIX) or (
-                p.is_file() and p.suffix.lower() in (".tmp", ".log", ".part"))
-            if allowed and safe_tree(p):
-                yield ("temp", p)
+    for root in ROOTS_TEMP:
+        if clean_path(root) and root.is_dir():
+            for p in root.iterdir():
+                if temp_allowed(p) and safe_tree(p): yield ("temp",p)
 
 def candidate_logs():
-    base = pathlib.Path("/var/log")
-    for p in base.rglob("*"):
-        if not p.is_file() or p.is_symlink() or "journal" in p.parts:
-            continue
-        if ARCHIVED_LOG.search(p.name) and p.stat().st_mtime < CUTOFF and not open_file(p):
-            yield ("rotated-log", p)
+    for root in LOG_ROOTS:
+        if clean_path(root) and root.is_dir():
+            for p in root.iterdir():
+                if log_allowed(p) and p.is_file() and safe_tree(p): yield ("rotated-log",p)
 
-def candidate_releases():
-    if not RELEASE_DIR.exists():
-        return
-    folders = [p for p in RELEASE_DIR.iterdir()
-               if p.is_dir() and not p.is_symlink() and RELEASE_NAME.fullmatch(p.name)]
-    folders.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-    protected = {p.name for p in folders[:4]}
-    current = command(["docker", "inspect", "-f", "{{.Config.Image}}", "pv-growth-app"], 8)
-    if current.returncode:
-        return
-    protected.add(current.stdout.strip().split(":")[-1])
-    for folder in folders:
-        if folder.name in protected or folder.stat().st_mtime >= CUTOFF:
-            continue
-        for p in folder.glob("pv-growth-app-*.tar"):
-            if p.is_file() and not p.is_symlink() and p.stat().st_mtime < CUTOFF and not open_file(p):
-                yield ("old-release-tar", p)
+def candidate_artifacts():
+    for p in ARTIFACTS:
+        if p.exists() and safe_tree(p): yield ("artifact",p)
+
+def protected_backups():
+    if not clean_path(BACKUP_ROOT) or not BACKUP_ROOT.is_dir(): return None
+    files=[p for p in BACKUP_ROOT.iterdir() if DB_BACKUP.fullmatch(p.name)]
+    if any(not clean_path(p) or not p.is_file() for p in files): return None
+    files.sort(key=lambda p:(p.stat().st_mtime,p.name),reverse=True)
+    if len(files)<2: return None
+    keep=set(files[:2])
+    # Two real, readable SQLite restore points required, not merely two filenames.
+    try:
+        for p in keep:
+            c=sqlite3.connect(p.as_uri()+"?mode=ro",uri=True,timeout=5)
+            try:
+                c.execute("PRAGMA query_only=ON")
+                tables={r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if p.stat().st_size==0 or not {"sources","raw_items","events","stories","jobs","publications"}<=tables: return None
+                if c.execute("PRAGMA quick_check").fetchall()!=[("ok",)]: return None
+            finally: c.close()
+    except (sqlite3.Error,OSError): return None
+    return keep
+
+def candidate_backups():
+    keep=protected_backups()
+    if keep is None: return
+    for p in sorted(BACKUP_ROOT.iterdir()):
+        if p not in keep and (DB_BACKUP.fullmatch(p.name) or OTHER_BACKUP.fullmatch(p.name)) and safe_tree(p):
+            yield ("backup",p)
 
 def created_time(value):
-    """Docker nanosecond timestamps aren't accepted verbatim by datetime."""
-    value = re.sub(r"\.(\d{6})\d+(?=[+-])", r".\1", value.replace("Z", "+00:00"))
+    value=re.sub(r"(\.\d{6})\d+(?=[+-])",r"\1",value.replace("Z","+00:00"))
     return datetime.datetime.fromisoformat(value).timestamp()
 
+def container_inventory():
+    r=command(["docker","ps","-aq"],15)
+    if r.returncode: raise RuntimeError("container inventory failed")
+    if not r.stdout.split(): return []
+    r=command(["docker","inspect",*r.stdout.split()],20)
+    if r.returncode: raise RuntimeError("container inspect failed")
+    return json.loads(r.stdout)
+
 def candidate_images():
-    images = command(["docker", "image", "ls", "--format", "{{.Repository}}|{{.Tag}}"], 15)
-    containers = command(["docker", "ps", "-aq"], 15)
-    if images.returncode or containers.returncode:
-        return
-    active_ids = set()
-    for cid in containers.stdout.split():
-        result = command(["docker", "inspect", "-f", "{{.Image}}", cid], 8)
-        if result.returncode:
-            return  # fail closed
-        active_ids.add(result.stdout.strip())
-    tags = {}
-    for row in images.stdout.splitlines():
-        if "|" not in row:
-            continue
-        repo, tag = row.split("|", 1)
-        if repo not in IMAGE_KEEP or tag == "<none>":
-            continue
-        ref = repo + ":" + tag
-        meta = command(["docker", "image", "inspect", "-f",
-                        "{{.Id}}|{{.Created}}", ref], 8)
-        if meta.returncode or "|" not in meta.stdout:
-            return
-        image_id, stamp = meta.stdout.strip().split("|", 1)
-        try:
-            moment = created_time(stamp)
-        except ValueError:
-            return
-        tags.setdefault(repo, []).append((moment, ref, image_id))
-    for repo, entries in tags.items():
+    listing=command(["docker","image","ls","--format","{{.Repository}}|{{.Tag}}"],15)
+    if listing.returncode: raise RuntimeError("image inventory failed")
+    containers=container_inventory()
+    active={x["Image"] for x in containers}
+    repos={}
+    for row in listing.stdout.splitlines():
+        repo,tag=row.split("|",1)
+        if repo not in IMAGE_KEEP or tag=="<none>": continue
+        ref=repo+":"+tag
+        meta=command(["docker","image","inspect","-f","{{.Id}}|{{.Created}}",ref],10)
+        if meta.returncode: raise RuntimeError("image inspect failed")
+        image_id,stamp=meta.stdout.strip().split("|",1)
+        repos.setdefault(repo,[]).append((created_time(stamp),ref,image_id))
+    for repo,entries in repos.items():
         entries.sort(reverse=True)
-        keep = {x[1] for x in entries[:IMAGE_KEEP[repo]]}
-        for when, ref, image_id in entries:
-            if when < CUTOFF and ref not in keep and image_id not in active_ids:
-                yield ("old-image", pathlib.Path(ref))
+        distinct=list(dict.fromkeys(x[2] for x in entries))
+        keep=set(distinct[:IMAGE_KEEP[repo]])|active
+        unused=[x for x in entries if x[2] not in active]
+        if unused: keep.add(unused[0][2])  # newest distinct unused rollback
+        for age,ref,image_id in entries:
+            if age<CUTOFF and image_id not in keep: yield ("old-image",pathlib.Path(ref))
 
 def candidate_dr_volumes():
-    """Old Rasteh DR-test volumes only; preserve newest VERIFIED restore point.
+    listing=command(["docker","volume","ls","--format","{{.Name}}"],15)
+    if listing.returncode: raise RuntimeError("volume inventory failed")
+    names=sorted((n for n in listing.stdout.splitlines() if DR_NAME.fullmatch(n)),reverse=True)
+    containers=container_inventory()
+    refs={v.get("Name") for c in containers for v in c["Mounts"]}
+    for name in names[1:]:  # preserve previous policy's newest DR restore point
+        if name in refs: continue
+        r=command(["docker","volume","inspect",name],10)
+        if r.returncode: raise RuntimeError("volume inspect failed")
+        meta=json.loads(r.stdout)[0]
+        mount=pathlib.Path("/var/lib/docker/volumes")/name/"_data"
+        if meta["Driver"]!="local" or meta.get("Options") or meta["Mountpoint"]!=str(mount): continue
+        if created_time(meta["CreatedAt"])<CUTOFF and safe_tree(mount):
+            yield ("old-dr-volume",pathlib.Path(name))
 
-    All containers (including stopped) are protected. The live akhbot_data
-    volume has a different name and is NEVER a candidate.
-    """
-    listing = command(["docker", "volume", "ls", "--format", "{{.Name}}"], 12)
-    containers = command(["docker", "ps", "-aq"], 12)
-    if listing.returncode or containers.returncode:
-        return
-    names = sorted((name for name in listing.stdout.splitlines()
-                    if re.fullmatch(r"akhbot_dr_\d{8}T\d{6}Z", name)),
-                   reverse=True)
-    if len(names) < 2:
-        return
-    mounts = set()
-    for cid in containers.stdout.splitlines():
-        info = command(["docker", "inspect", "-f",
-                        "{{range .Mounts}}{{.Name}} {{end}}", cid], 10)
-        if info.returncode:
-            return
-        mounts.update(info.stdout.strip().split())
-    for name in names[1:]:  # keep most recent even if older than 5 days
-        if name in mounts:
-            continue
-        meta = command(["docker", "volume", "inspect", "-f",
-                        "{{.CreatedAt}}", name], 10)
-        if meta.returncode:
-            return
-        try:
-            age = created_time(meta.stdout.strip())
-        except ValueError:
-            return
-        if age < CUTOFF:
-            yield ("old-dr-volume", pathlib.Path(name))
+def parent_fd(p):
+    """Open each absolute parent component with O_NOFOLLOW, anchoring deletion."""
+    fd=os.open("/",os.O_RDONLY|os.O_DIRECTORY)
+    try:
+        for part in p.parent.parts[1:]:
+            new=os.open(part,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=fd)
+            os.close(fd); fd=new
+        return fd
+    except BaseException:
+        os.close(fd); raise
 
-def apply(kind, p):
-    global _OPEN_FILES
-    _OPEN_FILES = None  # re-check active file descriptors before every deletion
-    if kind == "old-dr-volume":
-        name = str(p)
-        if not re.fullmatch(r"akhbot_dr_\d{8}T\d{6}Z", name):
-            return "SKIP_SCOPE"
-        remaining = command(["docker", "volume", "ls", "--format", "{{.Name}}"], 10)
-        if remaining.returncode:
-            return "SKIP_UNKNOWN"
-        snapshots = sorted(v for v in remaining.stdout.splitlines()
-                           if re.fullmatch(r"akhbot_dr_\d{8}T\d{6}Z", v))
-        if len(snapshots) < 2 or name == snapshots[-1]:
-            return "SKIP_LATEST"
-        refs = command(["docker", "ps", "-aq"], 10)
-        if refs.returncode:
-            return "SKIP_UNKNOWN"
-        for cid in refs.stdout.splitlines():
-            mounts = command(["docker", "inspect", "-f",
-                              "{{range .Mounts}}{{.Name}} {{end}}", cid], 10)
-            if mounts.returncode or name in mounts.stdout.split():
-                return "SKIP_IN_USE"
-        return "REMOVED" if command(["docker", "volume", "rm", name], 30).returncode == 0 else "SKIP_IN_USE"
-    if kind == "old-image":
-        ref = str(p)
-        active = command(["docker", "ps", "-a", "--format", "{{.Image}}"], 10)
-        if active.returncode or ref in active.stdout.splitlines():
-            return "SKIP_ACTIVE"
-        return ("REMOVED" if command(["docker", "image", "rm", ref], 90).returncode == 0
-                else "SKIP_IN_USE")
-    if p.is_symlink() or open_file(p):
-        return "SKIP_OPEN"
-    if kind == "temp":
-        if not str(p).startswith(("/tmp/", "/var/tmp/")) or not safe_tree(p):
-            return "SKIP_SAFETY"
-        shutil.rmtree(p) if p.is_dir() else p.unlink()
-    elif kind == "rotated-log":
-        if not str(p).startswith("/var/log/") or not ARCHIVED_LOG.search(p.name):
-            return "SKIP_SCOPE"
-        if p.stat().st_mtime >= CUTOFF:
-            return "SKIP_AGE"
-        p.unlink()
-    elif kind == "old-release-tar":
-        if not str(p).startswith(str(RELEASE_DIR) + "/") or not p.name.endswith(".tar"):
-            return "SKIP_SCOPE"
-        if p.stat().st_mtime >= CUTOFF:
-            return "SKIP_AGE"
-        p.unlink()   # manifests/scripts stay for audit
-    else:
-        return "SKIP_UNKNOWN"
+def apply(kind,p):
+    p=pathlib.Path(p)
+    if kind in ("old-image","old-dr-volume"):
+        candidates=candidate_images if kind=="old-image" else candidate_dr_volumes
+        if (kind,p) not in list(candidates()): return "SKIP_PROTECTED"
+        argv=["docker","image" if kind=="old-image" else "volume","rm",str(p)]
+        r=command(argv,90)
+        return "REMOVED" if r.returncode==0 else "SKIP_IN_USE"
+    scoped=(kind=="temp" and temp_allowed(p)) or (kind=="rotated-log" and log_allowed(p)) or (
+        kind=="artifact" and p in ARTIFACTS) or (kind=="backup" and p.parent==BACKUP_ROOT and (
+            DB_BACKUP.fullmatch(p.name) or OTHER_BACKUP.fullmatch(p.name)))
+    if not scoped: return "SKIP_SCOPE"
+    if kind=="backup":
+        keep=protected_backups()
+        if keep is None or p in keep: return "SKIP_PROTECTED"
+    if not safe_tree(p): return "SKIP_SAFETY"
+    before=p.lstat()
+    fd=parent_fd(p)
+    try:
+        current=os.stat(p.name,dir_fd=fd,follow_symlinks=False)
+        if (before.st_dev,before.st_ino,before.st_mtime_ns,before.st_ctime_ns)!=(current.st_dev,current.st_ino,current.st_mtime_ns,current.st_ctime_ns):
+            return "SKIP_CHANGED"
+        if stat.S_ISDIR(current.st_mode):
+            if not shutil.rmtree.avoids_symlink_attacks: return "SKIP_PLATFORM"
+            if sys.version_info >= (3,11):
+                shutil.rmtree(p.name,dir_fd=fd)
+            else:  # Python 3.10 host: anchor cwd to the verified parent fd.
+                cwd=os.open(".",os.O_RDONLY|os.O_DIRECTORY)
+                try:
+                    os.fchdir(fd); shutil.rmtree(p.name)
+                finally:
+                    os.fchdir(cwd); os.close(cwd)
+        else: os.unlink(p.name,dir_fd=fd)
+    finally: os.close(fd)
     return "REMOVED"
 
 def housekeeping():
-    results = []
-    npm_comm = command(["ps", "-eo", "comm="], 8).stdout.splitlines()
-    cache = pathlib.Path("/root/.npm/_cacache")
-    if not any(x in npm_comm for x in ("npm", "npx")) and cache.is_dir() and not cache.is_symlink() and not open_file(cache):
-        shutil.rmtree(cache)
-        results.append({"operation": "npm-download-cache", "result": "REMOVED"})
-    apt = command(["systemctl", "is-active", "--quiet", "apt-daily.service"], 8)
-    if apt.returncode:
-        r = command(["apt-get", "clean"], 60)
-        results.append({"operation": "apt-download-cache", "result": "CLEAN" if r.returncode == 0 else "SKIP"})
-    r1 = command(["journalctl", "--rotate"], 30)
-    r2 = command(["journalctl", "--vacuum-time=5days", "--vacuum-size=160M"], 60)
-    results.append({"operation": "journal-5day-160MB",
-                    "result": "VACUUMED" if r1.returncode == r2.returncode == 0 else "FAILED"})
-    return results
+    """Only the explicitly requested shared journal exception."""
+    changes=[]
+    for argv in (["journalctl","--rotate"],["journalctl","--vacuum-time=5days","--vacuum-size=160M"]):
+        r=command(argv,60)
+        changes.append({"operation":argv,"status":"OK" if r.returncode==0 else "FAILED","detail":r.stderr.strip()})
+        if r.returncode: break
+    return changes
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--apply", action="store_true", help="actually reclaim; otherwise dry-run")
-    parser.add_argument("--skip-images", action="store_true")
-    args = parser.parse_args()
-    before = shutil.disk_usage("/").free
-    planned = list(candidate_temp()) + list(candidate_logs()) + list(candidate_releases())
-    if not args.skip_images:
-        planned += list(candidate_images())
-        planned += list(candidate_dr_volumes())
-    changes = []
-    if args.apply:
-        for kind, p in planned:
-            try:
-                status = apply(kind, p)
-            except Exception as err:
-                status = "FAILED:" + type(err).__name__
-            changes.append({"kind": kind, "path": str(p), "status": status})
+def audit_append(payload):
+    if not clean_path(AUDIT_PATH.parent): raise RuntimeError("unsafe audit parent")
+    fd=parent_fd(AUDIT_PATH)
+    try:
+        out=os.open(AUDIT_PATH.name,os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_NOFOLLOW,0o600,dir_fd=fd)
         try:
-            changes.extend(housekeeping())
-        except Exception as err:
-            changes.append({"operation": "cache-journal", "result": "FAILED:" + type(err).__name__})
-    payload = {"at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-               "mode": "APPLY" if args.apply else "DRY_RUN",
-               "retention_days": RETENTION_DAYS, "planned": [
-                   {"kind": kind, "path": str(p)} for kind, p in planned],
-               "actions": changes, "free_before_bytes": before,
-               "free_after_bytes": shutil.disk_usage("/").free}
-    print(json.dumps(payload, ensure_ascii=False))
-    return int(any("FAILED" in str(x) for x in changes))
+            s=os.fstat(out)
+            if not stat.S_ISREG(s.st_mode) or s.st_nlink!=1: raise RuntimeError("unsafe audit file")
+            with os.fdopen(out,"a") as f:
+                out=-1; f.write(json.dumps(payload)+"\n"); f.flush(); os.fsync(f.fileno())
+        finally:
+            if out!=-1: os.close(out)
+    finally: os.close(fd)
 
-if __name__ == "__main__":
-    sys.exit(main())
+def main(argv=None):
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--apply",action="store_true")
+    parser.add_argument("--skip-images",action="store_true")
+    args=parser.parse_args(argv)
+    # The same lock covers direct/manual and timer invocations.
+    lock_parent=parent_fd(LOCK_PATH)
+    try: lock=os.open(LOCK_PATH.name,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600,dir_fd=lock_parent)
+    finally: os.close(lock_parent)
+    try:
+        if not stat.S_ISREG(os.fstat(lock).st_mode) or os.fstat(lock).st_nlink!=1: raise RuntimeError("unsafe lock")
+        try: fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(json.dumps({"mode":"SKIP_LOCKED"})); return 0
+        before=shutil.disk_usage("/").free
+        planned=list(candidate_temp())+list(candidate_logs())+list(candidate_artifacts())+list(candidate_backups())
+        if not args.skip_images: planned+=list(candidate_images())
+        planned+=list(candidate_dr_volumes())
+        payload={"at_utc":datetime.datetime.now(datetime.timezone.utc).isoformat(),"mode":"APPLY" if args.apply else "DRY_RUN","retention_days":5,
+                 "planned":[{"kind":k,"path":str(p)} for k,p in planned],"actions":[],"free_before_bytes":before,
+                 "protected_db_backups":sorted(str(p) for p in (protected_backups() or set())),
+                 "journal_plan":["rotate","vacuum-time=5days","vacuum-size=160M"],
+                 "exclusions":["unknown temp/cache","foreign images/volumes/releases","active logs","newest DR restore point","container image/mount references","newest unused image rollback"]}
+        if args.apply:
+            audit_append({**payload,"phase":"START"})  # abort before deleting if durable audit unavailable
+            for kind,p in planned:
+                try: result=apply(kind,p)
+                except Exception as err: result="FAILED:"+type(err).__name__
+                entry={"kind":kind,"path":str(p),"status":result}
+                payload["actions"].append(entry)
+                audit_append({"at_utc":payload["at_utc"],"phase":"ACTION",**entry})
+            payload["actions"].extend(housekeeping())
+        payload["free_after_bytes"]=shutil.disk_usage("/").free
+        payload["net_free_delta_bytes"]=payload["free_after_bytes"]-before
+        if args.apply: audit_append({**payload,"phase":"FINISH"})
+        print(json.dumps(payload))
+        return int(any("FAILED" in x["status"] for x in payload["actions"]))
+    finally: os.close(lock)
+
+if __name__=="__main__": sys.exit(main())
