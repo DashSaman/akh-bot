@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily safe five-day disk-retention check
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 UTC
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=10min
+Unit=rasteh-host-disk-maintenance.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Safely reclaim stale caches, rotated logs and obsolete verified artifacts (shared host)
+Documentation=file:///opt/akhbot/app/docs/HOST-DISK-RETENTION.md
+Wants=network-online.target
+After=local-fs.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=40%
+TimeoutStartSec=15min
+ExecStart=/usr/bin/flock -n /run/lock/rasteh-host-disk-maintenance.lock /usr/bin/python3 /usr/local/sbin/rasteh-host-disk-retention.py --apply
+StandardOutput=journal
+StandardError=journal
