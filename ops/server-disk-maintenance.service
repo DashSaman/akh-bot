@@ -1,0 +1,24 @@
+[Unit]
+Description=Safe daily RoboT disk maintenance with health gate and audit
+After=docker.service apache2.service mysql.service
+ConditionPathExists=/usr/local/sbin/server-disk-retention.py
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/sbin/server-disk-retention.py --apply
+User=root
+UMask=0077
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=25%
+IOWeight=10
+MemoryMax=512M
+TimeoutStartSec=30min
+KillMode=control-group
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+StandardOutput=journal
+StandardError=journal

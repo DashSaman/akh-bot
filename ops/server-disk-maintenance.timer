@@ -1,0 +1,11 @@
+[Unit]
+Description=Check and clean only allowlisted surplus resources every 24 hours
+
+[Timer]
+OnCalendar=*-*-* 03:40:00 UTC
+RandomizedDelaySec=10min
+Persistent=true
+Unit=server-disk-maintenance.service
+
+[Install]
+WantedBy=timers.target

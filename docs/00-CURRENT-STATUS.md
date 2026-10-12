@@ -1,5 +1,11 @@
 # 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
 
+## 2026-10-12 operator-authorized all-project retention checkpoint
+- Expanded cleanup after explicit operator authorization and 50% available-space target; inactive Android SDK packages retired with confirmation. Live services/ports/network, adb/AVD and customer databases preserved.
+- Safe daily general controller installed: health/deployment gate, exact allowlists, old developer caches/release exports/rotated logs, native archive-before-purge MySQL logs, Rasteh last-two backup guard, private audit and resource caps. Supersedes only the old maintenance timer.
+- Schedule daily 03:40 UTC +0–10min (07:10–07:20 Tehran). Dry-run and systemd apply both passed. Full local suite 527 passed, 24 preexisting warnings.
+- More than 50% available after verified cleanup; exact disk/health evidence stays in /opt/akhbot/audit/all-project-cleanup-20261012. Full policy, repository map and compressed export recovery steps: [SERVER_DISK_RETENTION.md](SERVER_DISK_RETENTION.md).
+
 ## 2026-10-12 Rasteh-only disk retention checkpoint
 - Scoped cleanup replaced the earlier broad shared-host rule: foreign images/releases, global caches and anonymous temp paths are excluded. Dry-run default; --apply, internal lock, mount/symlink/open-file guards, durable audit and two validated .db backups preserved.
 - Manual maintenance passed: 41 exact paths removed, journal vacuum 24 MiB; at least 352,108,544 bytes of obsolete allocated storage removed. Concurrent live allocations outweighed reclamation: service net free delta -105,398,272 bytes. Do not describe this as overall increased host free space.
