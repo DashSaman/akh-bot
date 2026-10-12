@@ -70,7 +70,16 @@ def select_headline(claims: list[dict]) -> str:
                 continue
             cand = extract_headline("", text) or text.split("\n", 1)[0].strip()
             if is_valid_headline(cand):
-                return cand[:140]
+                # A source-originated, unverified military/news report must
+                # remain explicitly attributed in the headline. The claim
+                # extractor separates media speaker labels into actor, so
+                # extract_headline() alone would silently turn "Channel 12
+                # reports X" into the unqualified statement "X".
+                actor = (c.get("actor") or "").strip().rstrip(":：")
+                if actor.startswith(("کانال ", "شبکه ", "خبرگزاری ")) and actor not in cand:
+                    from app.verification.gates import fit_headline
+                    return fit_headline(f"{actor}: {cand}")
+                return cand
     return ""
 
 

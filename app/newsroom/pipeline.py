@@ -274,9 +274,14 @@ async def process_new_items(db: Database, provider: LLMProvider | None,
     """One pipeline pass over NEW items. Idempotent; safe to re-run.
     EVENT_ENGINE_V2_ENABLED=true → the P3-E V2 engine is authoritative."""
     if getattr(settings, "event_engine_v2_enabled", False):
+        import asyncio
+
         from app.newsroom.v2_pipeline import process_new_items_v2
 
-        return process_new_items_v2(db, brand, settings)
+        # V2 is intentionally synchronous and may spend up to a minute waiting
+        # on free translation providers. Keep that work off FastAPI's event loop
+        # so /health and the public site stay responsive during provider stalls.
+        return await asyncio.to_thread(process_new_items_v2, db, brand, settings)
     items_repo = RawItemsRepo(db)
     events_repo = EventsRepo(db)
     stories = StoriesRepo(db)

@@ -122,6 +122,11 @@ class FreeAiRouter:
         self.transport = transport
         self.zero_cost = e.get("ZERO_COST_MODE", "true").lower() != "false"
         self.free_only = e.get("AI_FREE_ONLY", "true").lower() != "false"
+        self.openai_compat_fallback_models = [
+            model.strip()
+            for model in e.get("OPENAI_COMPAT_FALLBACK_MODELS", "").split(",")
+            if model.strip()
+        ]
         order_csv = priority_order and ",".join(priority_order)
         order = [p.strip() for p in
                  (order_csv or e.get("AI_PROVIDER_PRIORITY", PROVIDER_ORDER_DEFAULT)).split(",")
@@ -163,31 +168,64 @@ class FreeAiRouter:
 
     # -------------------------------------------------------------- routing
     async def chat_json(self, *, system: str, user: str,
-                        max_tokens: int = 2000) -> dict[str, Any] | None:
+                        max_tokens: int = 2000,
+                        openai_compat_model: str | None = None,
+                        openai_compat_fallback_models: list[str] | None = None,
+                        validator=None,
+                        ) -> dict[str, Any] | None:
         """Try providers in priority order; any failure → next; all fail → None.
-        Newsroom workers NEVER break because of a provider failure."""
+
+        A caller may supply a preferred model plus ordered validated
+        fallbacks on the OpenAI-compatible gateway. Those are tried first,
+        then the gateway's configured model, then OPENAI_COMPAT_FALLBACK_MODELS.
+        Newsroom workers NEVER break because of a provider failure.
+        """
         from app.integrations.llm.base import extract_json
 
         for st in self.states:
             if not (st.enabled and st.configured):
                 continue
-            try:
-                t0 = time.monotonic()
-                raw = await self._call(st, system, user, max_tokens)
-                parsed = extract_json(raw)
-                st.health, st.last_error = "HEALTHY", None
-                st.last_success = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                st.latency_ms = int((time.monotonic() - t0) * 1000)
-                st.calls_today += 1
-                return parsed
-            except Exception as ex:  # noqa: BLE001 — failover, never crash
-                st.last_error = redact(str(ex))[:120]
+            model_candidates: list[str | None] = [None]
+            if st.name == "openai_compat":
+                model_candidates = []
+                ordered_models = [
+                    openai_compat_model,
+                    *(openai_compat_fallback_models or []),
+                ]
+                for candidate in ordered_models:
+                    if (candidate and candidate != st.model
+                            and candidate not in model_candidates):
+                        model_candidates.append(candidate)
+                model_candidates.append(None)
+                for fallback_model in self.openai_compat_fallback_models:
+                    if (fallback_model != st.model
+                            and fallback_model not in model_candidates):
+                        model_candidates.append(fallback_model)
+            last_ex: Exception | None = None
+            for model_override in model_candidates:
+                try:
+                    t0 = time.monotonic()
+                    raw = await self._call(
+                        st, system, user, max_tokens,
+                        model_override=model_override)
+                    parsed = extract_json(raw)
+                    if validator is not None and not validator(parsed):
+                        raise LlmError("response rejected by caller validation")
+                    st.health, st.last_error = "HEALTHY", None
+                    st.last_success = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                    st.latency_ms = int((time.monotonic() - t0) * 1000)
+                    st.calls_today += 1
+                    return parsed
+                except Exception as ex:  # noqa: BLE001 — failover, never crash
+                    last_ex = ex
+            if last_ex is not None:
+                st.last_error = redact(str(last_ex))[:120]
                 st.health = ("RATE_LIMITED" if "429" in st.last_error else "DEGRADED")
                 log.warning("provider %s failed: %s", st.name, st.last_error)
         return None  # deterministic fallback (caller HOLDs)
 
     async def _call(self, st: ProviderState, system: str, user: str,
-                    max_tokens: int) -> str:
+                    max_tokens: int, *, model_override: str | None = None) -> str:
         """One provider call using ONLY the state resolved at construction."""
         if st.name == "gemini":
             url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -211,7 +249,7 @@ class FreeAiRouter:
             # literally mention json; guarantee it on the fallback path.
             if st.name == "groq" and "json" not in f"{system} {user}".lower():
                 sys_text = f"{system} Respond ONLY with a valid JSON object."
-            payload = {"model": st.model,
+            payload = {"model": model_override or st.model,
                        "messages": [{"role": "system", "content": sys_text},
                                     {"role": "user", "content": user}],
                        "temperature": 0.2, "max_tokens": max_tokens,

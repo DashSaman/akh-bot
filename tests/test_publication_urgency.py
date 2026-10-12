@@ -143,7 +143,7 @@ def test_rate_cap_throttles_not_fails(db, settings):
                                status="APPROVED")
     SourcesRepo(db).update(a, source_control_state="OWNER_ENABLED")
     RawItemsRepo(db).insert(source_id=a, platform="telegram", external_key="k1",
-                            title="", text="دلار امروز در بازار آزاد به کانال تازه رسید",
+                            title="", text="دلار امروز در بازار آزاد تهران به کانال تازه رسید",
                             activation_ok=True,
                             published_at="2026-10-03T10:00:00+00:00")
     class B: short_name = "راسته"; name_fa = "راسته"; tagline_fa = "خ"; telegram_handle = "R"

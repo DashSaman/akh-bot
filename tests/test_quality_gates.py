@@ -45,11 +45,11 @@ def test_source_context_resolves_minister_passes():
     assert publication_quality_gate(None, h, body, 60, 0) is None
 
 
-def test_selfcontained_world_news_passes():
+def test_selfcontained_world_news_outside_new_scope():
     h = "مقامات لیتوانی فرودگاه ویلنیوس را بسته و پروازهای ناتو را آغاز کردند"
     assert context_incomplete(h) is False
     assert routine_ceremony(h) is False
-    assert publication_quality_gate(None, h, "", 50, 0) is None  # regional+NATO
+    assert publication_quality_gate(None, h, "", 50, 0) == "OUT_OF_EDITORIAL_SCOPE"  # new Iran/regional scope
 
 
 def test_material_iran_diplomacy_passes_ceremony_exemption():

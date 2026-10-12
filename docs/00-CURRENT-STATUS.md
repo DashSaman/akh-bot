@@ -1,13 +1,20 @@
 # 00-CURRENT-STATUS — RUNTIME TRUTH (release-freeze 2026-10-04, v1.0.0-telegram)
 
+## Emergency public-format hotfix — 2026-10-09 / اصلاح اضطراری قالب عمومی
+- Production `akhbot-app` omitted the owner's decided `config/brand.yml`, resulting in the stale «پیش‌نمایش سکوی خبری» footer. Restored runtime config, added a persistent brand-config mount to docker-run/compose, and fail-closed public-brand checks.
+- 87 unique @RastehNews messages carrying the preview footer were edited in place (160 ledger revisions); no replacement posts. One-time repair script saves original variants under `/data/backups/`.
+- Removed duplicated truncated headlines/leads and source promotional lines at render time. Additional historic duplicate-only messages are being audited separately; do not claim completion until edit API responses confirm it.
+- فارسی: فایل برند اصلی به کانتینر بازگردانده شد؛ امضای آزمایشی ممنوع شد، ۸۷ پیام قبلی در همان شناسه ویرایش شدند و اصلاح تکرار متن خبر به قالب اضافه شد.
+
+
 One current truth. History lives in git.
 
-- **Repository HEAD:** c674510
-- **Production runtime SHA:** c674510 (deployed, healthy; CI green on this SHA)
+- **Repository HEAD:** edd819a (deployed code commit; docs-only follow-up may be newer)
+- **Production runtime SHA:** edd819a (deployed healthy 2026-10-06)
 - **Governance:** PASS — 59 DONE / 0 PARTIAL / 2 BLOCKED_EXTERNAL
 - **Parts:** PART 1 = PASS - PART 2 = BLOCKED_EXTERNAL - PART 3 = PASS - PART 4 = PASS - PART 5 = PASS - PART 6 = PASS - PART 7 = PASS - PART 8 = BLOCKED_EXTERNAL - PART 9 = PASS - PART 10 = PASS
-- **Publication ledger SENT: **474**** (live ledger; edits never count)
-- **Tests:** 414/414 (clean GitHub checkout: compileall + pytest + governance + docker build)
+- **Publication ledger SENT: **474**** (historical freeze snapshot; live ledger may be higher)
+- **Tests:** 435/435 (full local regression suite, 2026-10-06)
 
 ## Scope (FINAL, frozen)
 INGEST many sources -> normalize -> verify -> Iran-first priority ->
@@ -28,6 +35,9 @@ quota — low-value content never fills it.
 - Hard quality gates: HOLD_ABUSIVE, CONTEXT_INCOMPLETE, LOW_VALUE_CONTENT,
   LOW_MATERIALITY, MATERIALITY_FLOOR, DROP_DUPLICATE, HOLD_TRANSLATION_QUALITY
   — enforced at ENQUEUE and re-enforced at SEND time.
+- Translation: EN prefers GPT-OSS-120B; AR prefers Qwen3.8-27B. Both then
+  use validated Cloudflare/Mistral Small 3.1, then Z.AI GLM-4.5-Flash, before
+  the generic `rasteh-translation` combo. Provider failure remains fail-closed.
 - One event = one story = one SEND; material updates EDIT the same post
   (remote_id preserved); non-material duplicates DROP.
 

@@ -20,8 +20,9 @@ HIGH_RISK_PATTERNS = [
 ]
 _HIGH_RISK_RE = [re.compile(p, re.IGNORECASE) for p in HIGH_RISK_PATTERNS]
 
-_NUM = re.compile(r"\d+")
+_NUM = re.compile(r"\d{1,3}(?:[,٬،]\d{3})+|\d+")
 _FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+_THOUSANDS_SEPS = str.maketrans("", "", ",٬،")
 
 
 def is_high_risk(text: str) -> bool:
@@ -29,8 +30,9 @@ def is_high_risk(text: str) -> bool:
 
 
 def numbers_in(text: str) -> set[str]:
-    """Digits as written in Persian/Arabic/Latin press — normalized to ASCII."""
-    return set(_NUM.findall((text or "").translate(_FA_DIGITS)))
+    """Press-style numbers normalized across scripts and thousands separators."""
+    normalized = (text or "").translate(_FA_DIGITS)
+    return {n.translate(_THOUSANDS_SEPS) for n in _NUM.findall(normalized)}
 
 
 def decide_claim_state(claim_text: str, *, independent_sources: int,
@@ -137,6 +139,35 @@ def split_speaker_label(text: str):
 
 
 _EMPTY_HEADLINE_WORDS = {"عاجل", "فوری", "breaking", "خبر", "خبر فوری", "مهم"}
+_HEADLINE_TARGET = 140
+_HEADLINE_HARD_MAX = 200
+_HEADLINE_BOUNDARIES = frozenset("؛.!؟!?")
+
+
+def fit_headline(text: str, target: int = _HEADLINE_TARGET,
+                 hard_max: int = _HEADLINE_HARD_MAX) -> str:
+    """Keep a headline complete near the soft target; never slice a word.
+
+    Prefer the first sentence/clause boundary shortly after the legacy
+    140-char target. A naturally complete line up to 200 chars is preserved.
+    Truly long unpunctuated text is clipped on a word boundary with an
+    explicit ellipsis instead of masquerading as a complete sentence.
+    """
+    t = (text or "").strip()
+    if len(t) <= target:
+        return t
+    upper = min(len(t), hard_max)
+    for idx in range(target, upper):
+        if t[idx] in _HEADLINE_BOUNDARIES:
+            return t[:idx + 1].strip()
+    if len(t) <= hard_max:
+        return t
+    cut = t[:target].rstrip()
+    word_break = cut.rfind(" ")
+    if word_break >= max(40, target // 2):
+        cut = cut[:word_break]
+    return cut.rstrip(" ‌،,:؛") + "…"
+
 
 def is_valid_headline(h: str) -> bool:
     """MIN_HEADLINE_INFORMATION: a real proposition, not a speaker label/flag/name."""
@@ -164,10 +195,10 @@ def extract_headline(title: str, text: str) -> str:
     lines = [ln.strip() for ln in body.split(chr(10)) if ln.strip()] if body else []
     for ln in lines[:5]:
         if is_valid_headline(ln):
-            return ln[:140]
+            return fit_headline(ln)
     # fall back to longest line
     if lines:
         cand = max(lines, key=len)
         if is_valid_headline(cand):
-            return cand[:140]
+            return fit_headline(cand)
     return ""

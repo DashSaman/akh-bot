@@ -34,6 +34,8 @@ _BOILERPLATE = (
     "مطابق بررسی سیستم",
     "این اطلاعات تاکنون به‌طور مستقل تأیید نشده است",
     "تأیید شد",
+    "با ما اخبار جنگی بروز باشید",
+    "چنل های بی سواد",
 )
 
 
@@ -75,6 +77,8 @@ def brand_signature(brand: Any, enabled: bool = True) -> str:
         return ""
     handle = getattr(brand, "telegram_handle", "")
     name, tag = getattr(brand, "name_fa", ""), getattr(brand, "tagline_fa", "")
+    if "نام نهایی هنوز انتخاب نشده است" in tag:
+        raise ValueError("Public Telegram publishing blocked: unresolved brand config")
     lines = []
     if name and tag:
         lines.append(f"— {name} | {tag}")
@@ -97,6 +101,37 @@ def sanitize_public_copy(text: str, mode: str = "hidden", brand: Any = None) -> 
     return re.sub(r"\n{3,}", "\n\n", "\n".join(out)).strip()
 
 
+def squash_duplicate_lead(text: str) -> str:
+    """Collapse a truncated/repeated opening into one complete news paragraph.
+
+    Preserve every factual word: the longer lead replaces the overlapping
+    headline. Keep source, verification status, and signature unchanged.
+    """
+    blocks = re.split(r"\n\s*\n", (text or "").strip())
+    if len(blocks) < 2:
+        return text
+    match = re.search(r"\*\*(.+?)\*\*", blocks[0], re.S)
+    if not match:
+        return text
+    headline = match.group(1).strip()
+    prefix = re.sub(r"(?:…|\.\.\.)$", "", headline).rstrip(". ")
+    lead = blocks[1].strip()
+    if len(prefix) < 30 or not lead.startswith(prefix):
+        return text
+    new_head, remainder = lead, ""
+    if len(lead) > 320:
+        sentence = re.search(r"(?<=[.!؟])\s+", lead[:420])
+        if sentence and sentence.start() >= 50:
+            new_head = lead[:sentence.start()+1]
+            remainder = lead[sentence.end():].strip()
+    blocks[0] = blocks[0][:match.start(1)] + new_head + blocks[0][match.end(1):]
+    if remainder:
+        blocks[1] = remainder
+    else:
+        blocks.pop(1)
+    return "\n\n".join(blocks)
+
+
 def build_public_text(status, body, brand, source_mode="hidden",
                       signature_enabled=True, source_names=""):
     icon = STATUS_ICONS.get(status, "")
@@ -116,7 +151,7 @@ def build_public_text(status, body, brand, source_mode="hidden",
     src = ("منبع: " + source_names) if source_names else ""
     sig = brand_signature(brand, signature_enabled)
     parts = [p for p in (clean, src, sig) if p]
-    return (chr(10) + chr(10)).join(parts)
+    return squash_duplicate_lead((chr(10) + chr(10)).join(parts))
 
 
 # URGENT-FIX §5 — generic status/warning-only public bodies (deadline-era
@@ -453,7 +488,9 @@ def is_persian_public_text(text: str) -> bool:
 
 def publisher_language_gate(text: str) -> bool:
     """LAST-CHANCE fail-closed gate before ANY public API call."""
-    return story_content_language_check(text)
+    return story_content_language_check(text) and not any(
+        marker in text for marker in ("پیش‌نمایش سکوی خبری", "نام نهایی هنوز انتخاب نشده است")
+    )
 
 
 _PERSIAN_ONLY_LETTERS = set("پچژگ")

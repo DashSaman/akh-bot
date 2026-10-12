@@ -159,7 +159,7 @@ def test_watchdog_monopoly_and_starvation(db):
     _diversity_and_starvation_check(db)
     mono = SettingsRepo(db).get("SOURCE_MONOPOLY_DETECTED")
     assert mono and "Dominant" in mono, "monopoly must be detected (warn-only)"
-    # starvation: 5 fresh eligible items never linked to any event
+    # starvation: 5 NEW eligible items never linked to any event
     st = _src(db, "starved", "StarvedFeed")
     now2 = datetime.now(timezone.utc).isoformat(timespec="seconds")
     for i in range(5):
@@ -167,7 +167,18 @@ def test_watchdog_monopoly_and_starvation(db):
             "INSERT INTO raw_items (source_id, platform, external_key, url, title,"
             " text, language, fetched_at, activation_ok, processed_state)"
             " VALUES (?, 'telegram', ?, '', 'خبر مهم بی‌پوشش', '', 'fa', ?, 1,"
-            " 'PROCESSED')", (st, "z%d" % i, now2))
+            " 'NEW')", (st, "z%d" % i, now2))
     _diversity_and_starvation_check(db)
     starve = SettingsRepo(db).get("SOURCE_STARVATION")
     assert starve and "StarvedFeed" in starve, "starvation must be detected"
+
+
+def test_processed_context_fragments_not_false_starvation(db):
+    from app.ingestion.scheduler import _diversity_and_starvation_check
+    from app.db.repo import SettingsRepo
+    st = _src(db, "context_only", "AJA")
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    for i in range(5):
+        db.execute("INSERT INTO raw_items (source_id, platform, external_key, title, text, language, fetched_at, activation_ok, processed_state) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)", (st, "telegram", f"frag{i}", "", "fragment", "ar", now, "PROCESSED"))
+    _diversity_and_starvation_check(db)
+    assert not SettingsRepo(db).get("SOURCE_STARVATION")

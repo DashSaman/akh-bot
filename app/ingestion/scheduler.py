@@ -350,12 +350,13 @@ def _diversity_and_starvation_check(db) -> None:
             log.warning("SOURCE_MONOPOLY_DETECTED: %s", diag)
     if not monopoly:
         _S(db).set("SOURCE_MONOPOLY_DETECTED", "")
-    # starvation: fresh eligible items never linked to any event
+    # Only NEW items are actionable backlog. PROCESSED context-only and
+    # incomplete fragments intentionally have no event (not starvation).
     since2h = (now - timedelta(hours=2)).isoformat(timespec="seconds")
     orphan = db.query(
         "SELECT s.id sid, COALESCE(NULLIF(s.identity,''), s.name) ident, COUNT(*) c"
         " FROM raw_items ri JOIN sources s ON s.id = ri.source_id"
-        " WHERE ri.activation_ok = 1 AND ri.fetched_at >= ?"
+        " WHERE ri.activation_ok = 1 AND ri.processed_state = 'NEW' AND ri.fetched_at >= ?"
         " AND NOT EXISTS (SELECT 1 FROM event_items ei WHERE ei.raw_item_id = ri.id)"
         " GROUP BY s.id HAVING c >= 5 ORDER BY c DESC LIMIT 5", (since2h,))
     if orphan:
