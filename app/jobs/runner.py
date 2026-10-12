@@ -190,7 +190,7 @@ def make_send_handler(db: Database, settings: Settings,
         try:
             import json as _json2
             _d = _json2.loads(story["draft_json"] or "{}")
-            _body2 = " ".join(_d.get("details") or [])
+            _body2 = " ".join([str(_d.get("lead") or "")] + list(_d.get("details") or []))
         except Exception:  # noqa: BLE001
             _body2 = ""
         _qreason = publication_quality_gate(

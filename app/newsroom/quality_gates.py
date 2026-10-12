@@ -108,6 +108,17 @@ CEREMONY_PATTERNS = (
 )
 CEREMONY_ESCAPE = re.compile("|".join(MATERIAL_KEYWORDS))
 
+LIVEBLOG_META_PATTERNS = (
+    re.compile(r"(?:به\s+)?(?:صفحه|پوشش)\s+زنده(?:\s+ما)?[^\n]{0,100}خوش\s*آمدید"),
+    re.compile(r"^(?:🔻|🔴|⚫|🟠|🟡|🟢)?\s*پایان\s+(?:این\s+)?پوشش\s+زنده"),
+    re.compile(r"(?:صفحه|پوشش)\s+زنده(?:\s+ما)?[^\n]{0,80}(?:به\s+پایان\s+رسید|تمام\s+شد)"),
+    re.compile(r"پوشش\s+زنده[^\n]{0,180}(?:در\s+این\s+صفحه|با\s+ما\s+همراه\s+باشید|همراه\s+ما\s+باشید|گزارش\s+خواهیم\s+کرد|اینجا\s+ببینید)"),
+    re.compile(r"welcome\s+to\s+(?:our\s+)?live\s+(?:page|coverage)", re.I),
+    re.compile(r"(?:live\s+coverage|live\s+page)\s+(?:has\s+)?(?:ended|closed)", re.I),
+    re.compile(r"(?:أهلا|اهلا|مرحب[اأ])[^\n]{0,80}(?:التغط[يی]ة\s+المباشرة|البث\s+المباشر)"),
+    re.compile(r"(?:انتهت|نهاية)\s+(?:هذه\s+)?التغط[يی]ة\s+المباشرة"),
+)
+
 _NUM = re.compile(r"\d+")
 _FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 
@@ -166,6 +177,12 @@ def context_incomplete(headline: str, body: str = "") -> bool:
         if not _has_anchor(full):
             return True
     return False
+
+
+def liveblog_boilerplate(headline: str, body: str = "") -> bool:
+    """Publisher/UI live-page prose is metadata, not a reportable news event."""
+    t = _norm(headline + " " + body)
+    return any(p.search(t) for p in LIVEBLOG_META_PATTERNS)
 
 
 def low_value(headline: str, body: str = "") -> bool:
@@ -275,6 +292,8 @@ def publication_quality_gate(db, headline: str, body: str, weight: int,
     """Returns None (publish) or a HOLD reason. §1-§6, §9, §10."""
     if promotional_content(headline, body):
         return "HOLD_PROMOTIONAL_CONTENT"
+    if liveblog_boilerplate(headline, body):
+        return "HOLD_LIVEBLOG_BOILERPLATE"
     if abusive_content(headline, body):
         return "HOLD_ABUSIVE"
     if low_value(headline, body):
