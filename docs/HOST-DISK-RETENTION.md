@@ -133,3 +133,36 @@ ONLY this exact Rasteh DR naming scheme, retains the newest restore point
 regardless of age, and refuses to touch a volume mounted by any running OR
 stopped Docker container. Live akhbot_data, PVNetwork/GrowthOS/TwoID volumes
 and all database backups are outside this cleanup rule.
+
+## 2026-10-12 post-maintenance app-only rollout
+After disk space was recovered, the one-file production/source mismatch in
+story_evolution.py was closed by rebuilding ONLY the Rasteh application image
+with a full immutable Git SHA label:
+1775049d8d0fc3f6e6445220ac33fb9deeba6358.
+The container was replaced using a bounded app-only rollback flow, keeping
+the same internal Docker network, 127.0.0.1:8307 port, existing 9Router
+settings, and akhbot_data named volume. The current owner-approved brand.yml
+was bind-mounted read-only and checked by SHA256 against the prior running
+configuration. No other app was stopped or recreated. The old Rasteh container
+is stopped as the latest known-good rollback under
+akhbot-app-rollback-20261012.
+
+The pre-deployment SQLite online backup was checked by PRAGMA integrity_check
+and then losslessly compressed to a 78 MiB .sqlite3.gz under
+akhbot_data/backups (gzip -t PASS; source uncompressed 300 MiB copy removed).
+The deployed image passed isolated attribution/liveblog/brand smoke tests.
+The new process returned HTTP 200 on /health and Docker HEALTHY within the
+controlled rollout window; DB integrity was OK, all 76 Python source files
+matched the server Git source, no TCP listening ports changed, and unrelated
+containers retained their original IDs/start-times.
+
+At the first post-deploy check there were no natural new Telegram SENDs in
+the short observation window, although ingestion/pipeline/watchdog/reverify
+heartbeats were fresh, pending jobs zero and both publication stall markers
+empty. Do not call a natural publication canary verified until a later SEND
+arrives. Never post synthetic news to force acceptance.
+
+The new disk timer was also observed unexpectedly inactive at 01:44 UTC
+(cause not proven); it was immediately started again at 01:49 UTC and verified
+active with its next calendar firing about 03:40–03:50 UTC. Future explicit
+administrator stops cannot be defeated by this single timer alone.

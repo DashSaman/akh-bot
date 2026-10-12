@@ -1,8 +1,16 @@
 # 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
 
+## 2026-10-12 latest deployment and safe-disk maintenance
+- Source release commit 1775049d; GitHub CI GREEN. Running Rasteh image has matching revision label and passed fresh private smoke tests, no new public synthetic items posted.
+- Shared-host disk 38 GiB: baseline 95% used / ~2 GiB free; after only disposable cache, >5d retired GrowthOS tar/images, rotated logs, stale temps and obsolete Rasteh DR test volumes, ~88–89% used / ~4.3–4.4 GiB free. Protected active images, all Docker volumes, Android SDK/AVD and containerd stores.
+- Daily systemd timer at 03:40 UTC (+0–10 min) installed, exercised and enabled; journal archives vacuumed to 5 days. Timer was unexpectedly stopped once during parallel host activity and re-enabled; check timer active state during monitoring. See docs/HOST-DISK-RETENTION.md and ops/host_disk_retention.py.
+- All 9 non-rollback running containers healthy or unchanged; no TCP listener port changes; only akhbot-app was deliberately restarted/recreated with full backup, root-only audit and stopped rollback container.
+- Latest isolated suite: 496 PASS, governance 59 DONE / 2 BLOCKED_EXTERNAL; final DR-retention GitHub CI GREEN.
+- No fresh natural Telegram SEND had yet been observed in the first minutes following app rollout; recent active worker heartbeats/zero pending jobs/empty stall markers are encouraging but not a publication canary.
+
 ## 2026-10-12 independent reconciliation / FCC decision
-- **Repository HEAD:** c907d716 at the documented 2026-10-12 source-sync checkpoint (for the latest SHA, use git rev-parse HEAD and GitHub CI).
-- **Production runtime SHA:** edd819a (**historical 2026-10-06 only**, NOT the current running image SHA); current image revision remains **UNVERIFIED** because its metadata lacks an immutable Git revision label.
+- **Repository HEAD:** 1775049d at the app-release checkpoint (later documentation-only commits may move main; consult GitHub for current HEAD).
+- **Production runtime SHA:** 1775049d8d0fc3f6e6445220ac33fb9deeba6358 (verified immutable image label, running akhbot-app:release-1775049d; source files 76/76 matched).
 - GitHub/main and server main reached the **same source Git tree** at source-sync commit 363ba05a, with all 15 formerly local-only commits and reviewed tracked/untracked hotfixes preserved. The original 15-commit head remains under archive/rasteh-server-pre-sync-20261012; dirty-state backup at /opt/akhbot/backups/rasteh-sync-20261012T0048Z.
 - GitHub CI for 363ba05a: **GREEN** (test and Docker jobs). Isolated worktree suite: **483 passed**; governance: **59 DONE / 2 BLOCKED_EXTERNAL**.
 - This is **source parity**, not proof of the *running Docker image SHA*: the existing akhbot-app:liveblog-20261009 image is healthy but has no immutable Git revision label. No service restart/deployment took place as part of this source reconciliation.
