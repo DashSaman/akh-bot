@@ -113,6 +113,145 @@ def test_english_and_hebrew_translate(db):
     assert tr2 and tr2["headline"]
 
 
+@pytest.mark.parametrize(("source_language", "title", "evidence", "expected_model"), [
+    ("en", "Talks continue", "Sources said talks are continuing",
+     "groq/openai/gpt-oss-120b"),
+    ("ar", "استمرار المحادثات", "قالت مصادر إن المحادثات مستمرة",
+     "zai/glm-4.5-flash"),
+    ("he", "השיחות נמשכות", "לפי מקורות השיחות נמשכות",
+     "rasteh-translation"),
+])
+def test_translation_routes_model_by_source_language(
+        source_language, title, evidence, expected_model):
+    """EN/AR get their proven model first; other languages keep the combo."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_models.append(json.loads(request.content.decode())["model"])
+        payload = {"headline": "گفت‌وگوها ادامه یافت",
+                   "lead": "منابع گفتند گفت‌وگوها همچنان ادامه دارد"}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, title, evidence, source_language=source_language))
+    assert tr and tr["headline"]
+    assert seen_models == [expected_model]
+
+
+@pytest.mark.parametrize(("source_language", "title", "evidence", "preferred_model"), [
+    ("en", "Talks continue", "Sources said talks are continuing",
+     "groq/openai/gpt-oss-120b"),
+    ("ar", "استمرار المحادثات", "قالت مصادر إن المحادثات مستمرة",
+     "zai/glm-4.5-flash"),
+])
+def test_language_preferred_failure_uses_validated_fallbacks_before_combo(
+        source_language, title, evidence, preferred_model):
+    """Validated language-specific fallbacks must precede the generic combo."""
+    seen_models = []
+    success_model = (
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct"
+        if source_language == "ar" else "zai/glm-4.5-flash"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model != success_model:
+            return httpx.Response(503, text="candidate unavailable")
+        payload = {"headline": "گفت‌وگوها ادامه یافت",
+                   "lead": "منابع گفتند گفت‌وگوها همچنان ادامه دارد"}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, title, evidence, source_language=source_language))
+    assert tr and tr["headline"]
+    expected = [
+        preferred_model,
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ] if source_language == "ar" else [
+        preferred_model,
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "zai/glm-4.5-flash",
+    ]
+    assert seen_models == expected
+
+
+def test_english_validated_fallbacks_failure_still_reaches_existing_combo():
+    """Language-aware fallbacks must not remove the existing 9Router combo."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model != "rasteh-translation":
+            return httpx.Response(503, text="validated candidate unavailable")
+        payload = {"headline": "گفت‌وگوها ادامه یافت",
+                   "lead": "منابع گفتند گفت‌وگوها همچنان ادامه دارد"}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, "Talks continue", "Sources said talks are continuing",
+        source_language="en"))
+    assert tr and tr["headline"]
+    assert seen_models == [
+        "groq/openai/gpt-oss-120b",
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+        "zai/glm-4.5-flash",
+        "rasteh-translation",
+    ]
+
+
+def test_existing_combo_failure_falls_back_to_configured_zai_model():
+    """If the 9Router combo fails, configured free Z.AI is the last gateway fallback."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model != "zai/glm-4.5-flash":
+            return httpx.Response(503, text="gateway candidate unavailable")
+        payload = {"headline": "گفت‌وگوها ادامه یافت",
+                   "lead": "منابع گفتند گفت‌وگوها همچنان ادامه دارد"}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "OPENAI_COMPAT_FALLBACK_MODELS": "zai/glm-4.5-flash",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    result = asyncio.run(r.chat_json(
+        system="Translate to Persian JSON", user="Talks continue", max_tokens=100))
+    assert result and result["headline"]
+    assert seen_models == [
+        "rasteh-translation",
+        "zai/glm-4.5-flash",
+    ]
+
+
 # ---- §12: no provider → HOLD (V2 integration) ----
 
 def test_no_provider_holds_arabic_event(db, settings):
@@ -171,6 +310,13 @@ def test_invented_number_rejected():
         " في الهجوم قتل 10 جنود", "در این حمله ۱۲ نظامی کشته شدند")
 
 
+def test_thousands_separator_change_is_same_number():
+    """News-style 3,200 and Persian ۳۲۰۰ are the same factual number."""
+    assert consistency_issues(
+        "The report mentions 3,200 centrifuges",
+        "گزارش به ۳۲۰۰ سانتریفیوژ اشاره می‌کند") == []
+
+
 def test_negation_reversal_rejected():
     assert "NEGATION_REVERSED" in consistency_issues(
         "الجيش لم يؤكد الحادثة", "ارتش حمله را تأیید کرد")
@@ -199,6 +345,291 @@ def test_consistent_translation_passes():
     assert consistency_issues(
         " قد يكون الهجوم وقع صباحا وقتل 10 جنود",
         "به گزارش منابع، حمله ممکن است صبح رخ داده و ۱۰ نظامی کشته شدند") == []
+
+
+def test_protected_iranian_name_mistranslation_rejected():
+    """Regression: Araghchi must never silently become «عارقی»."""
+    issues = consistency_issues(
+        "Iranian Foreign Minister Abbas Araghchi spoke in New York",
+        "عباس عارقی، وزیر امور خارجه ایران، در نیویورک سخنرانی کرد")
+    assert "ENTITY_CHANGED:عراقچی" in issues
+
+
+def test_protected_iranian_name_arabic_jeem_alias_rejected():
+    """Regression: Arabic عراقجي must still require canonical Persian عراقچی."""
+    issues = consistency_issues(
+        "قال وزير الخارجية الإيراني عباس عراقجي إن المحادثات ستستمر",
+        "عباس عراقی‌جی، وزیر امور خارجه ایران، گفت مذاکرات ادامه خواهد یافت")
+    assert "ENTITY_CHANGED:عراقچی" in issues
+
+
+def test_arabic_source_token_leak_rejected():
+    """Regression: Arabic definite-article tokens must not leak into Persian copy."""
+    issues = consistency_issues(
+        "نقص البنزين يضع الحكومة أمام مأزق حقيقي",
+        "نقص البنزین دولت را در موقعیتی دشوار قرار داد")
+    assert "ARABIC_SOURCE_TOKEN_LEAK:البنزین" in issues
+
+
+@pytest.mark.parametrize("token", [
+    "\u0642\u0648\u0627\u062a",
+    "\u0627\u0642\u062a\u062d\u0627\u0645",
+    "\u0645\u062f\u0627\u0647\u0645\u0627\u062a",
+    "\u0627\u0639\u062a\u0642\u0627\u0644\u0627\u062a",
+    "\u062c\u0628\u0647\u0627\u062a",
+    "\u0645\u062a\u0637\u0648\u0639\u06cc\u0646",
+    "\u0641\u06cc",
+])
+def test_observed_arabic_newsroom_terms_are_rejected(token):
+    source = f"{token} source context"
+    generated = f"{token} Persian-looking output"
+    assert f"ARABIC_SOURCE_TOKEN_LEAK:{token}" in consistency_issues(source, generated)
+
+
+def test_newsroom_term_leak_fails_over_to_next_arabic_model():
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model == "zai/glm-4.5-flash":
+            payload = {
+                "headline": "\u0642\u0648\u0627\u062a Israeli bad output",
+                "lead": "\u0645\u062f\u0627\u0647\u0645\u0627\u062a and \u0627\u0639\u062a\u0642\u0627\u0644\u0627\u062a bad output",
+            }
+        else:
+            payload = {
+                "headline": "نیروهای اسرائیلی خانه یک زندانی فلسطینی را منفجر کردند",
+                "lead": "نیروهای اسرائیلی پس از یورش به منطقه، چند نفر را بازداشت کردند.",
+            }
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r,
+        "\u0642\u0648\u0627\u062a source",
+        "\u0642\u0648\u0627\u062a \u0648 \u0645\u062f\u0627\u0647\u0645\u0627\u062a \u0648 \u0627\u0639\u062a\u0642\u0627\u0644\u0627\u062a",
+        source_language="ar"))
+    assert tr and tr["headline"].startswith("نیروهای اسرائیلی")
+    assert seen_models[:2] == [
+        "zai/glm-4.5-flash",
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ]
+
+
+def test_malformed_persian_typo_rejected():
+    """Regression: a Persian-looking AI typo must not pass the language gate."""
+    issues = consistency_issues(
+        "الجمهور السعودي يقتحم مقصورات الجماهير الاماراتي",
+        "هوادع سعودی به تماشاگران اماراتی حمله کردند")
+    assert "PERSIAN_ORTHOGRAPHY:هوادع" in issues
+
+
+def test_arabic_plural_leak_is_rejected():
+    """Regression: Arabic newsroom morphology must not masquerade as Persian."""
+    issues = consistency_issues(
+        "إصابات مباشرة لمطار عدن في جنوب اليمن",
+        "اصابات مستقیم به فرودگاه عدن در جنوب یمن")
+    assert "PERSIAN_ORTHOGRAPHY:اصابات" in issues
+
+
+def test_known_malformed_farsi_and_literal_arabic_calque_rejected():
+    issues = consistency_issues(
+        "على إيران أن تنهي هذا الملف ونقص البنزين يفاقم الأزمة",
+        "ترامپ: باید با ایران خاتیه دهیم؛ نقص بنزین بحران را تشدید کرد")
+    assert "PERSIAN_ORTHOGRAPHY:خاتیه" in issues
+    assert "PERSIAN_CALQUE:نقص_بنزین" in issues
+
+
+def test_observed_arabic_hybrid_word_is_rejected():
+    issues = consistency_issues(
+        "\u062d\u0644\u0641\u0627\u0624\u0647\u0645",
+        "\u062d\u0644\u0641\u0627\u06cc\u0634\u0627\u0646 \u062f\u0631 \u06cc\u0645\u0646 \u062d\u0636\u0648\u0631 \u062f\u0627\u0631\u0646\u062f")
+    assert any(x.startswith("PERSIAN_ORTHOGRAPHY:") for x in issues)
+
+
+def test_tadnis_alaqsa_must_not_become_production():
+    issues = consistency_issues(
+        "\u0625\u0646 \u062a\u062f\u0646\u064a\u0633 \u0627\u0644\u0623\u0642\u0635\u0649 \u064a\u0633\u062a\u0635\u0631\u062e \u0627\u0644\u062c\u0645\u064a\u0639",
+        "\u062a\u0648\u0644\u06cc\u062f \u0645\u0633\u062c\u062f \u0627\u0644\u0627\u0642\u0635\u06cc \u0647\u0645\u0647 \u0631\u0627 \u0628\u0647 \u0641\u0631\u06cc\u0627\u062f \u0645\u06cc\u200c\u06a9\u0634\u0627\u0646\u062f")
+    assert "SEMANTIC_MISTRANSLATION:TADNIS_ALAQSA" in issues
+
+
+def test_arabic_plural_leak_fails_over_to_clean_translation():
+    """The exact production regression must fail over to a clean provider output."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model == "zai/glm-4.5-flash":
+            payload = {"headline": "اصابات مستقیم به فرودگاه عدن در جنوب یمن",
+                       "lead": "اصابات مستقیم در فرودگاه عدن گزارش شد."}
+        else:
+            payload = {"headline": "اصابت مستقیم به فرودگاه عدن در جنوب یمن",
+                       "lead": "فرودگاه عدن در جنوب یمن هدف اصابت مستقیم قرار گرفت."}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, "إصابات مباشرة لمطار عدن",
+        "إصابات مباشرة لمطار عدن في جنوب اليمن",
+        source_language="ar"))
+    assert tr and tr["headline"] == "اصابت مستقیم به فرودگاه عدن در جنوب یمن"
+    assert seen_models[:2] == [
+        "zai/glm-4.5-flash",
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ]
+
+
+def test_arabic_typo_rejection_tries_next_validated_model():
+    """The exact production «هوادع» regression must fail over to a clean model."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model == "zai/glm-4.5-flash":
+            payload = {"headline": "هوادع سعودی به تماشاگران اماراتی حمله کردند",
+                       "lead": "هوادع سعودی به جایگاه تماشاگران یورش بردند."}
+        else:
+            payload = {"headline": "هواداران سعودی به تماشاگران اماراتی حمله کردند",
+                       "lead": "هواداران سعودی به جایگاه تماشاگران یورش بردند."}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, "الجمهور السعودي",
+        "الجمهور السعودي يقتحم مقصورات الجماهير الاماراتي",
+        source_language="ar"))
+    assert tr and tr["headline"] == "هواداران سعودی به تماشاگران اماراتی حمله کردند"
+    assert seen_models[:2] == [
+        "zai/glm-4.5-flash",
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ]
+
+
+def test_translated_long_headline_is_not_cut_mid_word():
+    """A provider ignoring the 110-char prompt must still return a complete headline."""
+    long_headline = (
+        "جمال خدارحمی و هیرش ناوگران، دو فعال مدنی اهل سنندج، در دو پرونده جداگانه "
+        "توسط دستگاه قضایی جمهوری اسلامی ایران به حبس تعلیقی و جزای نقدی محکوم شدند."
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        payload = {"headline": long_headline,
+                   "lead": "این دو فعال مدنی به حبس تعلیقی و جزای نقدی محکوم شدند."}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, "حكم قضائي", "صدر حكم بالسجن المعلق والغرامة المالية",
+        source_language="ar"))
+    assert tr and tr["headline"] == long_headline
+
+
+def test_cjk_script_leak_rejected():
+    """Regression: Han/CJK glyphs must never survive inside Persian news copy."""
+    issues = consistency_issues(
+        "نجحوا في طرد المحتلين ليكون البلد مستقلاً عزيزاً",
+        "شیخ نعیم قاسم: عراق با驱逐 اشغالگران مستقل شد")
+    assert "FOREIGN_SCRIPT_LEAK:CJK" in issues
+
+
+def test_cjk_quality_rejection_tries_next_validated_model():
+    """The exact production class of CJK leak must fail over to a clean model."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model == "zai/glm-4.5-flash":
+            payload = {"headline": "شیخ نعیم قاسم: عراق با驱逐 اشغالگران مستقل شد",
+                       "lead": "عراق با موفقیت اشغالگران را از کشور بیرون راند."}
+        else:
+            payload = {"headline": "شیخ نعیم قاسم: عراق با اخراج اشغالگران مستقل شد",
+                       "lead": "عراق با موفقیت اشغالگران را از کشور بیرون راند."}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, "امين عام حزب الله الشيخ نعيم قاسم",
+        "نجحوا في طرد المحتلين ليكون البلد مستقلاً عزيزاً",
+        source_language="ar"))
+    assert tr and tr["headline"] == "شیخ نعیم قاسم: عراق با اخراج اشغالگران مستقل شد"
+    assert seen_models[:2] == [
+        "zai/glm-4.5-flash",
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ]
+
+
+def test_translation_quality_rejection_tries_next_validated_model():
+    """A fluent-but-bad model answer must fail over, not be published or merely held."""
+    seen_models = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        model = json.loads(request.content.decode())["model"]
+        seen_models.append(model)
+        if model == "zai/glm-4.5-flash":
+            payload = {"headline": "نقص البنزین دولت را تحت فشار گذاشت",
+                       "lead": "نقص البنزین دولت را با مشکل روبه‌رو کرده است"}
+        else:
+            payload = {"headline": "کمبود بنزین دولت را تحت فشار گذاشت",
+                       "lead": "کمبود بنزین دولت را با مشکل روبه‌رو کرده است"}
+        return httpx.Response(200, json={"choices": [{"message": {"content":
+            json.dumps(payload, ensure_ascii=False)}}]})
+
+    r = _router({
+        "OPENAI_COMPAT_API_KEY": "sk-test-1234567890",
+        "OPENAI_COMPAT_BASE_URL": "http://nine-router.test/v1",
+        "OPENAI_COMPAT_MODEL": "rasteh-translation",
+        "AI_PROVIDER_PRIORITY": "openai_compat",
+    }, httpx.MockTransport(handler))
+    tr = asyncio.run(translate_event(
+        r, "أزمة البنزين", "نقص البنزين يضع الحكومة أمام مأزق حقيقي",
+        source_language="ar"))
+    assert tr and tr["headline"] == "کمبود بنزین دولت را تحت فشار گذاشت"
+    assert seen_models[:2] == [
+        "zai/glm-4.5-flash",
+        "cf/@cf/mistralai/mistral-small-3.1-24b-instruct",
+    ]
+
+
+def test_translation_consistency_rejects_lost_country_entity():
+    issues = consistency_issues(
+        "Iran announced a new sanctions response",
+        "پاسخ تازه‌ای به تحریم‌ها اعلام شد")
+    assert "ENTITY_LOST:country:ایران" in issues
 
 
 # ---- §12: source language ar forces translation (heuristic-proof) ----

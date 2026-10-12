@@ -164,3 +164,31 @@ def crisis_active(db) -> bool:
     if not state.get("active"):
         return False
     return str(state.get("until", "")) > _now_iso()
+
+# Owner directive 2026-10-08: strict scope for NEW Telegram publications.
+# Keep the existing soft Iran allocation for ordering, but never fill unused
+# capacity with unrelated world news. Regional stories need substantive
+# security/economic/diplomatic content rather than a place name alone.
+_NEIGHBOR_MARKERS = (
+    "عراق", "بغداد", "ترکیه", "آنکارا", "سوریه", "دمشق", "لبنان",
+    "بیروت", "اسرائیل", "تل‌آویو", "فلسطین", "غزه", "یمن", "حوثی",
+    "عربستان", "ریاض", "امارات", "قطر", "بحرین", "کویت", "عمان",
+    "افغانستان", "پاکستان", "آذربایجان", "ارمنستان", "ترکمنستان",
+    "خلیج فارس", "دریای سرخ", "خاورمیانه", "قفقاز",
+)
+_SUBSTANTIVE_MARKERS = (
+    "جنگ", "حمله", "موشک", "پهپاد", "بمباران", "آتش‌بس", "درگیری",
+    "نظامی", "امنیت", "ترور", "کشته", "زخمی", "تلفات", "تهدید",
+    "تحریم", "اقتصاد", "تورم", "ارز", "دلار", "نفت", "گاز", "تجارت",
+    "صادرات", "واردات", "بانک", "سرمایه", "قیمت", "مرز", "مذاکره",
+    "توافق", "دیپلماسی", "سفارت", "انتخابات", "اعتراض", "بحران",
+    "war", "attack", "missile", "sanction", "oil", "trade", "border",
+)
+
+def in_editorial_scope(headline: str, body: str = "") -> bool:
+    """Allow Iran-related or substantive nearby regional news, not global filler."""
+    text = ((headline or "") + " " + (body or "")).lower()
+    if is_iran_related(text):
+        return True
+    return (any(marker in text for marker in _NEIGHBOR_MARKERS)
+            and any(marker in text for marker in _SUBSTANTIVE_MARKERS))

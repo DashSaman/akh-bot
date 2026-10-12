@@ -71,6 +71,31 @@ def _item(db, source_id, key, text, minutes=0):
 PREFIX = "ترامپ به مجله تایم:"
 
 
+@pytest.mark.parametrize(("source_text", "expected_headline"), [
+    (
+        "جمال خدارحمی و هیرش ناوگران، دو فعال مدنی اهل سنندج، در دو پرونده جداگانه "
+        "توسط دستگاه قضایی جمهوری اسلامی ایران به حبس تعلیقی و جزای نقدی محکوم شدند.",
+        "جمال خدارحمی و هیرش ناوگران، دو فعال مدنی اهل سنندج، در دو پرونده جداگانه "
+        "توسط دستگاه قضایی جمهوری اسلامی ایران به حبس تعلیقی و جزای نقدی محکوم شدند.",
+    ),
+    (
+        "نتانیاهو بار دیگر به شهروندان اسرائیلی هشدار داد: به شما هشدار می‌دهم، آنها قبل "
+        "از انتخابات به ما حمله خواهند کرد , ما برای این موضوع آماده‌ایم؛ در وهله اول "
+        "چنین تلاش‌هایی را خنثی خواهیم کرد و در هر صورت، اگر آنها مرتکب این اشتباه شوند، "
+        "با قدرتی عظیم پاسخ خواهیم داد",
+        "نتانیاهو بار دیگر به شهروندان اسرائیلی هشدار داد: به شما هشدار می‌دهم، آنها قبل "
+        "از انتخابات به ما حمله خواهند کرد , ما برای این موضوع آماده‌ایم؛",
+    ),
+])
+def test_long_persian_headline_finishes_at_a_meaningful_boundary(
+        source_text, expected_headline):
+    """Regression: public headlines must never be chopped at character 140."""
+    from app.newsroom.story_evolution import select_headline
+
+    headline = select_headline([{"state": "UNVERIFIED", "text": source_text}])
+    assert headline == expected_headline
+
+
 def _interview_items(db, sid, n=5):
     _item(db, sid, "f0", PREFIX, 0)
     frags = [
@@ -86,6 +111,34 @@ def _interview_items(db, sid, n=5):
 
 
 # ---- §4 required fixture: 6 fragments → 1 Event → 1 Story → 1 SEND ----
+
+def test_v2_passes_are_serialized_to_prevent_duplicate_story_race(monkeypatch):
+    """pipeline + reverify may tick together, but V2 passes must never overlap."""
+    import threading
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+    import app.newsroom.v2_pipeline as v2
+
+    state_lock = threading.Lock()
+    active = 0
+    max_active = 0
+
+    def fake_locked(*args, **kwargs):
+        nonlocal active, max_active
+        with state_lock:
+            active += 1
+            max_active = max(max_active, active)
+        time.sleep(0.08)
+        with state_lock:
+            active -= 1
+        return {"processed": 0, "touched": 0, "stories": 0, "sends": 0, "edits": 0}
+
+    monkeypatch.setattr(v2, "_process_new_items_v2_locked", fake_locked)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(v2.process_new_items_v2, None, None, None) for _ in range(2)]
+        [f.result() for f in futures]
+    assert max_active == 1
+
 
 def test_six_fragment_interview_single_event_story_send(db, settings):
     s = _settings(settings)

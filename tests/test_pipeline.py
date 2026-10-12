@@ -1,6 +1,7 @@
 """Pipeline tests: lineage/dependency, conflicting casualties (high-risk), multilingual clustering."""
 import asyncio
 import json
+import threading
 
 from app.db.repo import ClaimsRepo, EventsRepo, RawItemsRepo, SourcesRepo
 from app.integrations.llm.glm import FakeProvider
@@ -108,3 +109,19 @@ def test_llm_outage_leaves_events_waiting(db):
     assert e["status"] == "READY"  # waiting for writer retry — never fake success
     claims = ClaimsRepo(db).for_event(e["id"])
     assert claims  # baseline claims still recorded (rules-only verification)
+
+
+def test_v2_pipeline_runs_off_event_loop_thread(monkeypatch):
+    """Slow sync V2/provider work must never block HTTP health/web event loop."""
+    event_loop_thread = threading.get_ident()
+    seen_threads = []
+
+    def fake_v2(db, brand, settings):
+        seen_threads.append(threading.get_ident())
+        return {"processed": 0}
+
+    monkeypatch.setattr("app.newsroom.v2_pipeline.process_new_items_v2", fake_v2)
+    settings = type("S", (), {"event_engine_v2_enabled": True})()
+    result = asyncio.run(process_new_items(None, None, None, settings))
+    assert result == {"processed": 0}
+    assert seen_threads and seen_threads[0] != event_loop_thread

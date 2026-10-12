@@ -255,9 +255,26 @@ def _event_sources(db, event_id: int) -> set[str]:
         (event_id,))}
 
 
+def promotional_content(headline: str, body: str = "") -> bool:
+    """Block calls to gamble, register, earn points or claim prizes.
+
+    Require a call-to-action plus promotional reward/offer context so an
+    actual news report ABOUT gambling is not automatically suppressed.
+    """
+    t = _norm((headline or "") + " " + (body or "")).lower()
+    calls = ("عضو شوید", "ثبت نام کنید", "ثبت‌نام کنید", "امتیاز کسب کنید",
+             "جوایز دریافت", "جایزه دریافت", "کلیک کنید", "وارد سایت شوید",
+             "کانال تلگرام:", "آدرس سایت:", "شرط بندی کنید", "شرط‌بندی کنید")
+    offers = ("کازینو", "شرط بندی", "شرط‌بندی", "آپشن بری بت", "آپسینه بری بت",
+              "جعبه جایزه", "گنجینه", "جوایز", "جایزه", "بونوس", "پاداش")
+    return any(c in t for c in calls) and any(o in t for o in offers)
+
+
 def publication_quality_gate(db, headline: str, body: str, weight: int,
                              event_id: int = 0) -> str | None:
     """Returns None (publish) or a HOLD reason. §1-§6, §9, §10."""
+    if promotional_content(headline, body):
+        return "HOLD_PROMOTIONAL_CONTENT"
     if abusive_content(headline, body):
         return "HOLD_ABUSIVE"
     if low_value(headline, body):
@@ -270,4 +287,7 @@ def publication_quality_gate(db, headline: str, body: str, weight: int,
         return "MATERIALITY_FLOOR"
     if event_id and duplicate_of_recent(db, event_id, headline):
         return "DROP_DUPLICATE"
+    from app.newsroom.iran_policy import in_editorial_scope
+    if not in_editorial_scope(headline, body):
+        return "OUT_OF_EDITORIAL_SCOPE"
     return None

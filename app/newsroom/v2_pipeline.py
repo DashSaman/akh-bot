@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from datetime import datetime, timedelta, timezone
 
 from app.core.textnorm import sha256_hex
@@ -733,8 +734,17 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
     summary["edits"] += 1
 
 
+_PROCESS_NEW_ITEMS_LOCK = threading.Lock()
+
+
 def process_new_items_v2(db: Database, brand, settings) -> dict:
-    """One V2 pass. Idempotent; deterministic; 0 AI. Safe to re-run."""
+    """Serialize V2 passes so pipeline/reverify cannot create duplicate stories."""
+    with _PROCESS_NEW_ITEMS_LOCK:
+        return _process_new_items_v2_locked(db, brand, settings)
+
+
+def _process_new_items_v2_locked(db: Database, brand, settings) -> dict:
+    """One V2 pass. Idempotent; deterministic; safe to re-run."""
     summary: dict = {"processed": 0, "touched": set(), "stories": 0,
                      "sends": 0, "edits": 0}
     SettingsRepo(db).set("pipeline_last_run", utcnow())
