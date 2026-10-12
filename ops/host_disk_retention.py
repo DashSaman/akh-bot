@@ -162,9 +162,65 @@ def candidate_images():
             if when < CUTOFF and ref not in keep and image_id not in active_ids:
                 yield ("old-image", pathlib.Path(ref))
 
+def candidate_dr_volumes():
+    """Old Rasteh DR-test volumes only; preserve newest VERIFIED restore point.
+
+    All containers (including stopped) are protected. The live akhbot_data
+    volume has a different name and is NEVER a candidate.
+    """
+    listing = command(["docker", "volume", "ls", "--format", "{{.Name}}"], 12)
+    containers = command(["docker", "ps", "-aq"], 12)
+    if listing.returncode or containers.returncode:
+        return
+    names = sorted((name for name in listing.stdout.splitlines()
+                    if re.fullmatch(r"akhbot_dr_\d{8}T\d{6}Z", name)),
+                   reverse=True)
+    if len(names) < 2:
+        return
+    mounts = set()
+    for cid in containers.stdout.splitlines():
+        info = command(["docker", "inspect", "-f",
+                        "{{range .Mounts}}{{.Name}} {{end}}", cid], 10)
+        if info.returncode:
+            return
+        mounts.update(info.stdout.strip().split())
+    for name in names[1:]:  # keep most recent even if older than 5 days
+        if name in mounts:
+            continue
+        meta = command(["docker", "volume", "inspect", "-f",
+                        "{{.CreatedAt}}", name], 10)
+        if meta.returncode:
+            return
+        try:
+            age = created_time(meta.stdout.strip())
+        except ValueError:
+            return
+        if age < CUTOFF:
+            yield ("old-dr-volume", pathlib.Path(name))
+
 def apply(kind, p):
     global _OPEN_FILES
     _OPEN_FILES = None  # re-check active file descriptors before every deletion
+    if kind == "old-dr-volume":
+        name = str(p)
+        if not re.fullmatch(r"akhbot_dr_\d{8}T\d{6}Z", name):
+            return "SKIP_SCOPE"
+        remaining = command(["docker", "volume", "ls", "--format", "{{.Name}}"], 10)
+        if remaining.returncode:
+            return "SKIP_UNKNOWN"
+        snapshots = sorted(v for v in remaining.stdout.splitlines()
+                           if re.fullmatch(r"akhbot_dr_\d{8}T\d{6}Z", v))
+        if len(snapshots) < 2 or name == snapshots[-1]:
+            return "SKIP_LATEST"
+        refs = command(["docker", "ps", "-aq"], 10)
+        if refs.returncode:
+            return "SKIP_UNKNOWN"
+        for cid in refs.stdout.splitlines():
+            mounts = command(["docker", "inspect", "-f",
+                              "{{range .Mounts}}{{.Name}} {{end}}", cid], 10)
+            if mounts.returncode or name in mounts.stdout.split():
+                return "SKIP_IN_USE"
+        return "REMOVED" if command(["docker", "volume", "rm", name], 30).returncode == 0 else "SKIP_IN_USE"
     if kind == "old-image":
         ref = str(p)
         active = command(["docker", "ps", "-a", "--format", "{{.Image}}"], 10)
@@ -220,6 +276,7 @@ def main():
     planned = list(candidate_temp()) + list(candidate_logs()) + list(candidate_releases())
     if not args.skip_images:
         planned += list(candidate_images())
+        planned += list(candidate_dr_volumes())
     changes = []
     if args.apply:
         for kind, p in planned:
