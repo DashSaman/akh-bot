@@ -146,6 +146,9 @@ def render_v2_public_text(content: dict, brand, source_names: str) -> str:
     from app.publishing.telegram_bot import build_public_text
 
     body = content["headline"]
+    lead = (content.get("lead") or "").strip()
+    if lead:
+        body += "\n\n" + lead
     if content["details"]:
         body += "\n\n" + "\n".join(content["details"])
     return build_public_text(content["lifecycle"], body, brand, "hidden", True,
