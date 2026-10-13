@@ -140,33 +140,37 @@ def split_speaker_label(text: str):
 
 _EMPTY_HEADLINE_WORDS = {"عاجل", "فوری", "breaking", "خبر", "خبر فوری", "مهم"}
 _HEADLINE_TARGET = 140
-_HEADLINE_HARD_MAX = 200
+_HEADLINE_HARD_MAX = 320
 _HEADLINE_BOUNDARIES = frozenset("؛.!؟!?")
 
 
 def fit_headline(text: str, target: int = _HEADLINE_TARGET,
                  hard_max: int = _HEADLINE_HARD_MAX) -> str:
-    """Keep a headline complete near the soft target; never slice a word.
+    """Return a *complete* standalone headline; never manufacture a half-sentence.
 
-    Prefer the first sentence/clause boundary shortly after the legacy
-    140-char target. A naturally complete line up to 200 chars is preserved.
-    Truly long unpunctuated text is clipped on a word boundary with an
-    explicit ellipsis instead of masquerading as a complete sentence.
+    The former implementation clipped long source lines at ~140 characters and
+    added an ellipsis. That created public Telegram posts which literally ended
+    mid-claim. Prefer the first real sentence boundary once enough information
+    (>=60 chars) is present, allow a longer complete sentence up to hard_max,
+    and if a source has no sentence punctuation, keep the source text intact
+    rather than publishing a knowingly truncated assertion.
     """
     t = (text or "").strip()
     if len(t) <= target:
         return t
+    minimum = min(60, max(1, len(t) - 1))
     upper = min(len(t), hard_max)
-    for idx in range(target, upper):
+    for idx in range(minimum, upper):
         if t[idx] in _HEADLINE_BOUNDARIES:
             return t[:idx + 1].strip()
     if len(t) <= hard_max:
         return t
-    cut = t[:target].rstrip()
-    word_break = cut.rfind(" ")
-    if word_break >= max(40, target // 2):
-        cut = cut[:word_break]
-    return cut.rstrip(" ‌،,:؛") + "…"
+    # A late boundary is still safer than an artificial ellipsis: public copy
+    # must be self-contained even when the source sentence is unusually long.
+    for idx in range(upper, len(t)):
+        if t[idx] in _HEADLINE_BOUNDARIES:
+            return t[:idx + 1].strip()
+    return t
 
 
 def is_valid_headline(h: str) -> bool:
