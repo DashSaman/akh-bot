@@ -38,6 +38,16 @@ _BOILERPLATE = (
     "چنل های بی سواد",
 )
 
+# Source channels often append a naked CTA plus URL/handle. sanitize_public_copy
+# removes the URL/foreign handle, which used to leave a public "بیشتر بخوانید:"
+# orphan. It is metadata, never a news sentence.
+_ORPHAN_CTA_RE = re.compile(
+    r"^\s*(?:بیشتر\s+بخوانید|ادامه\s+(?:مطلب|خبر)|جزئیات\s+بیشتر|"
+    r"مطالعه\s+بیشتر|برای\s+مطالعه\s+بیشتر|read\s+more)"
+    r"\s*[:：\-–—]?\s*$",
+    re.IGNORECASE,
+)
+
 
 def _norm_block(t: str) -> set:
     import re as _r
@@ -63,6 +73,8 @@ def strip_boilerplate(text: str) -> str:
     lines = []
     for ln in (text or "").split(chr(10)):
         if any(b in ln for b in _BOILERPLATE) and len(ln) < 120:
+            continue
+        if _ORPHAN_CTA_RE.fullmatch(ln.strip()):
             continue
         lines.append(ln)
     s2 = chr(10).join(lines)
@@ -102,10 +114,19 @@ def sanitize_public_copy(text: str, mode: str = "hidden", brand: Any = None) -> 
 
 
 def squash_duplicate_lead(text: str) -> str:
-    """Collapse a truncated/repeated opening into one complete news paragraph.
+    """Repair headline/body overlap without losing the longer factual sentence.
 
-    Preserve every factual word: the longer lead replaces the overlapping
-    headline. Keep source, verification status, and signature unchanged.
+    Typical source item:
+      truncated headline …
+      <blank>
+      same full sentence + another sentence
+      read-more URL
+
+    The old line-level deduper dropped the *longer* body as a duplicate and
+    exposed a half headline. Here we resolve the overlap before deduplication:
+    truncated headlines expand to the first complete source sentence; already
+    complete headlines keep their title and only the genuinely new suffix is
+    retained as body.
     """
     blocks = re.split(r"\n\s*\n", (text or "").strip())
     if len(blocks) < 2:
@@ -114,16 +135,33 @@ def squash_duplicate_lead(text: str) -> str:
     if not match:
         return text
     headline = match.group(1).strip()
+    truncated = headline.endswith(("…", "..."))
     prefix = re.sub(r"(?:…|\.\.\.)$", "", headline).rstrip(". ")
     lead = blocks[1].strip()
     if len(prefix) < 30 or not lead.startswith(prefix):
         return text
-    new_head, remainder = lead, ""
-    if len(lead) > 320:
-        sentence = re.search(r"(?<=[.!؟])\s+", lead[:420])
-        if sentence and sentence.start() >= 50:
-            new_head = lead[:sentence.start()+1]
-            remainder = lead[sentence.end():].strip()
+
+    new_head = headline
+    remainder = ""
+    if truncated:
+        # Complete the sentence containing the truncated prefix. Search from
+        # the prefix onward so an earlier sentence cannot cut the claim short.
+        boundary = None
+        for idx in range(max(0, len(prefix) - 1), len(lead)):
+            if lead[idx] in "؛.!؟!?":
+                boundary = idx
+                break
+        if boundary is None:
+            new_head = lead  # full source text is safer than a fabricated clip
+        else:
+            new_head = lead[:boundary + 1].strip()
+            remainder = lead[boundary + 1:].strip()
+    else:
+        # Exact/full headline duplicated at the start of detail: keep only the
+        # extra context, rather than dropping the entire longer paragraph.
+        rest = lead[len(headline):] if lead.startswith(headline) else lead[len(prefix):]
+        remainder = rest.lstrip(" \t\n،,:؛-–—").strip()
+
     blocks[0] = blocks[0][:match.start(1)] + new_head + blocks[0][match.end(1):]
     if remainder:
         blocks[1] = remainder
@@ -136,7 +174,6 @@ def build_public_text(status, body, brand, source_mode="hidden",
                       signature_enabled=True, source_names=""):
     icon = STATUS_ICONS.get(status, "")
     clean = strip_boilerplate(sanitize_public_copy(body, source_mode, brand))
-    clean = dedup_paragraphs(clean)
     lines = clean.split(chr(10))
     if lines and "راسته؟ |" in lines[0]:
         lines = lines[1:]  # branding lives in the footer only
@@ -148,10 +185,14 @@ def build_public_text(status, body, brand, source_mode="hidden",
         head = " ".join(x for x in (icon, topic_emoji(first), bolded) if x)
         lines[0] = head
         clean = chr(10).join(lines)
+    # Repair truncated/duplicated source copy BEFORE paragraph deduplication;
+    # otherwise the longer complete sentence can be discarded as a restatement.
+    clean = squash_duplicate_lead(clean)
+    clean = dedup_paragraphs(clean)
     src = ("منبع: " + source_names) if source_names else ""
     sig = brand_signature(brand, signature_enabled)
     parts = [p for p in (clean, src, sig) if p]
-    return squash_duplicate_lead((chr(10) + chr(10)).join(parts))
+    return (chr(10) + chr(10)).join(parts)
 
 
 # URGENT-FIX §5 — generic status/warning-only public bodies (deadline-era
@@ -186,10 +227,16 @@ def public_body_is_substantive(text: str) -> bool:
         if stripped.startswith(("🟢", "🔴", "🟠", "⚠️", "❌")):
             stripped = stripped.lstrip("🟢🔴🟠⚠️❌ ").strip()
         stripped = stripped.replace("*", "")
+        if _ORPHAN_CTA_RE.fullmatch(stripped):
+            continue
         if stripped:
             lines.append(stripped)
     body = chr(10).join(lines).strip()
     if not body:
+        return False
+    # A public headline ending in an ellipsis is, by definition, knowingly
+    # incomplete. Renderer should have expanded it from evidence before here.
+    if lines and lines[0].rstrip().endswith(("…", "...")):
         return False
     # generic status-only body (deadline regression): marker + no other claim
     non_generic = [ln for ln in lines
