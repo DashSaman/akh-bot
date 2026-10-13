@@ -1,0 +1,4 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Closed allowlisted logs older than five days; guarded weekly maintenance.
+40 3 * * 0 root /usr/bin/systemctl start scoped-server-cleanup.service

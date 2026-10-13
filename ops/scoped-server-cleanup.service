@@ -1,0 +1,18 @@
+[Unit]
+Description=Allowlisted safe weekly server disk cleanup
+ConditionPathExists=/usr/local/sbin/scoped-server-cleanup.py
+After=cron.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/sbin/scoped-server-cleanup.py --apply
+User=root
+UMask=0077
+Nice=19
+IOSchedulingClass=idle
+CPUQuota=25%
+IOWeight=10
+MemoryMax=512M
+TimeoutStartSec=30min
+StandardOutput=journal
+StandardError=journal
