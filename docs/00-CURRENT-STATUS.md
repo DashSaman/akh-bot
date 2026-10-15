@@ -1,5 +1,19 @@
 # 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
 
+## 2026-10-12 operator-authorized all-project retention checkpoint
+- Expanded cleanup after explicit operator authorization and 50% available-space target; inactive Android SDK packages retired with confirmation. Live services/ports/network, adb/AVD and customer databases preserved.
+- Safe daily general controller installed: health/deployment gate, exact allowlists, old developer caches/release exports/rotated logs, native archive-before-purge MySQL logs, Rasteh last-two backup guard, private audit and resource caps. Supersedes only the old maintenance timer.
+- Schedule daily 03:40 UTC +0–10min (07:10–07:20 Tehran). Dry-run and systemd apply both passed. Full local suite 527 passed, 24 preexisting warnings.
+- More than 50% available after verified cleanup; exact disk/health evidence stays in /opt/akhbot/audit/all-project-cleanup-20261012. Full policy, repository map and compressed export recovery steps: [SERVER_DISK_RETENTION.md](SERVER_DISK_RETENTION.md).
+
+## 2026-10-12 Rasteh-only disk retention checkpoint
+- Scoped cleanup replaced the earlier broad shared-host rule: foreign images/releases, global caches and anonymous temp paths are excluded. Dry-run default; --apply, internal lock, mount/symlink/open-file guards, durable audit and two validated .db backups preserved.
+- Manual maintenance passed: 41 exact paths removed, journal vacuum 24 MiB; at least 352,108,544 bytes of obsolete allocated storage removed. Concurrent live allocations outweighed reclamation: service net free delta -105,398,272 bytes. Do not describe this as overall increased host free space.
+- Fresh pre/post checks: container identities/restarts/ports and related service PIDs unchanged; DB integrity ok; pending and six-hour failed jobs zero; last successful Telegram SEND remote_id=2297. Nine containers running, one stopped Rasteh rollback retained.
+- A separate deployment during preparation replaced the live app with release-1775049d (revision label 1775049d); this maintenance task did not deploy the app. This new observation supersedes the older unverified-runtime checkpoint below.
+- Daily timer active (03:40 UTC + 0–10 min jitter), effective journal retention five days with size caps. Fresh full test suite: 508 passed, 24 existing warnings. Details and evidence: docs/HOST-DISK-RETENTION.md; host audit /opt/akhbot/audit/scoped-* and /data/reports/disk-maintenance.jsonl.
+- فارسی: پاک‌سازی محدود راسته اجرا و قانون قبلی اصلاح شد؛ ۴۱ مورد حذف، دو بکاپ معتبر و rollbackها حفظ شدند. سلامت دیتابیس، صف، کانتینرها و پورت‌ها ثابت است. نوشتن هم‌زمان باعث کاهش فضای آزاد خالص شد؛ ادعای افزایش کلی فضای آزاد نمی‌کنیم. استقرار برنامه توسط اجرای دیگری انجام شده است.
+
 ## 2026-10-12 independent reconciliation / FCC decision
 - **Repository HEAD:** c907d716 at the documented 2026-10-12 source-sync checkpoint (for the latest SHA, use git rev-parse HEAD and GitHub CI).
 - **Production runtime SHA:** edd819a (**historical 2026-10-06 only**, NOT the current running image SHA); current image revision remains **UNVERIFIED** because its metadata lacks an immutable Git revision label.

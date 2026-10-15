@@ -14,3 +14,4 @@
 | D10 | Writer outage → event returns to READY (retry), never HELD-fake-success | transient LLM downtime ≠ editorial hold | 2026-09-30 |
 | D11 | Persian/Arabic digit normalization in number checks | casualty contradictions are written in Persian digits | 2026-09-30 |
 | D12 | No code reuse from GPL/AGPL projects (TrendRadar, postiz) | license safety; MIT ideas only | 2026-09-30 |
+| D13 | General daily maintenance only after explicit all-project operator authorization; health gate + per-project allowlists + archive-before-native MySQL purge; preserve last-two recovery points | Safe surplus cleanup on shared RoboT; never force disk target by removing protected state | 2026-10-12 |
