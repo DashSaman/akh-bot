@@ -1,5 +1,16 @@
 # 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
 
+## Final verified release — 2026-11-08 / نسخهٔ نهایی بررسی‌شده
+
+- **Current live image:** `akhbot-app:quality-50fa9e5`; app and watcher revision `50fa9e569f2d48765ee3f46aded48e692d1d9362`. App healthy/HTTP 200, watcher running, zero restarts. All 99 app Python/SQL files matched the release source (line endings normalized). PRs #12 and #13 are merged.
+- **Tests:** complete isolated Linux suite **547 PASS**, 24 existing deprecation warnings; 53 focused publisher/QA/media regressions PASS. GitHub CI for the deployed code succeeded. Runtime offline smoke rejected notices, mixed-script words and cut-off leads across all four publisher paths, preserved a valid complete long story and created no public job for failed QA repair.
+- **Pause restored:** 14:43:24 UTC. Nine valid current-version jobs missed during the controlled pause were requeued after checking their pending publication, hash, current variant and copy quality. All nine subsequently completed; four actual SENT ledger updates and seven quality/policy SKIPs were observed across work after resume. Completed jobs alone are not counted as public sends.
+- فارسی: نسخهٔ نهایی روی هر دو سرویس فعال و سالم است؛ ۵۴۷ آزمون کامل و ۵۳ آزمون مرتبط موفق بود. متن خطا، نام مخلوط و جملهٔ بریده رد می‌شود. کپشن بلند به پیام متنی کامل تبدیل می‌شود؛ متن یا ویرایش بیش‌ازحد بلند به‌جای بریده‌شدن متوقف می‌شود. توقف موقت برداشته شد و هر ۹ کارِ معتبرِ وقفه پس از کنترل دوباره پردازش شد.
+- Cleanup and backup evidence is in the earlier checkpoint below. Baseline service units and TCP listeners were retained. Other tasks were independently deploying/auditing the reseller project, so later container count/free space changed outside this news rollout. No foreign service was stopped by this task.
+- فارسی: پاک‌سازی به سرویس‌ها و ورودی‌های شبکه آسیب مشاهده‌شده‌ای نزد؛ عملیات هم‌زمان پنل فروشندگان/ممیزی آن، خارج از این کار بود. پشتیبان تازه و نسخه‌های بازگشت حفظ شدند. اعلان‌های تاریخیِ شناسایی‌شده کورکورانه حذف یا با متن تأییدنشده جایگزین نشدند.
+- Remaining findings: the pre-existing daily cleanup timer is disabled; the live nine-router JSON log lacks rotation. The app health endpoint can time out during busy pipeline work (observed before and after rollout); the final recheck returned 200. Historic latest-payload flags require direct editorial review; these deterministic checks do not prove semantic correctness of every article.
+- فارسی: موارد باقی‌مانده شامل زمان‌بند پاک‌سازیِ از قبل غیرفعال، لاگ زندهٔ بدون چرخش nine-router و پاسخ‌گویی گاه‌به‌گاه کند صفحهٔ سلامت هنگام پردازش است. پیام‌های تاریخیِ علامت‌خورده به بازبینی مستقیم نیاز دارند؛ کنترل‌های قطعی جای فهم کامل معنایی همهٔ خبرها را نمی‌گیرند.
+
 ## 2026-11-08 publication-quality and safe-disk checkpoint
 
 - Follow-up: a malformed mixed-script/fragmented translation was found in a completed job, but its publication was SKIPPED by materiality (no remote ID). Independent readability checks now reject that pattern before it can rely on an unrelated gate. Focused regressions: 34 PASS; full Linux/deployment results follow in the incident record.
