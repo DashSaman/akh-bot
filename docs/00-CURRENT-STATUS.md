@@ -2,6 +2,9 @@
 
 ## 2026-11-08 publication-quality and safe-disk checkpoint
 
+- Follow-up: a malformed mixed-script/fragmented translation was found in a completed job, but its publication was SKIPPED by materiality (no remote ID). Independent readability checks now reject that pattern before it can rely on an unrelated gate. Focused regressions: 34 PASS; full Linux/deployment results follow in the incident record.
+- فارسی: موردِ ترجمهٔ بریده در صف پیدا شد، ولی منتشر نشده بود. کنترل مستقل واژهٔ مخلوط و بند ناقص اضافه شد؛ ۳۴ آزمون متمرکز موفق بود. وضعیت پایان‌یافتهٔ کار، دیگر در بررسی عملیاتی با ارسال واقعی اشتباه گرفته نمی‌شود.
+
 - فارسی: ریشهٔ اعلان عمومی «اشکال در ترجمه» در ناظر مستقل کیفیت پیدا شد: شکست اصلاح، یک ویرایش عمومیِ اعلان خطا تولید می‌کرد. اکنون شکست فقط HOLD داخلی می‌شود؛ اعلان خطا، امتناع مترجم و اعلانِ صرف برنامهٔ رادیویی در مرزهای انتشار نیز مسدود می‌شوند. صف قدیمی و کش ترجمه دوباره کنترل می‌شوند. اصلاح قدیمی ناظر حق بازنویسی نسخهٔ جدیدتر خبر را ندارد.
 - English: the independent QA watcher queued a public translation-review notice when repair failed. Failure now records an internal hold. Shared copy checks reject operational notices/refusals and broadcast-only announcements in translation/cache, queue execution and all Telegram publisher paths. QA updates use optimistic version checks; duplicate jobs preserve existing SENT history.
 - فارسی: پاک‌سازی با فهرست دقیق و کنترل پردازش/اتصال انجام شد: ۱۴۶ مورد موقت، ۱۳۲ ایمیج قدیمی و یک کش پژوهشیِ بدون استفاده حذف شدند؛ ۵ رکورد ایمیج دیگر توسط خود Docker همراه وابستگی‌های آزاد حذف شده بودند. نسخه‌های فعال و اخیر، پایگاه‌های داده و دیسک Android حفظ شدند. فضای آزاد از حدود ۵۹۴ MiB به ۳٫۹ GiB رسید؛ ۱۰ کانتینر، ۳۴ سرویس و ۴۵ ورودی TCP بدون ریستارت حفظ شدند.

@@ -64,6 +64,10 @@ def _foreign_evidence(db: Database, event_id: int) -> dict | None:
 def _story_issues(source: str, headline: str, lead: str) -> list[str]:
     copy = ((headline or "") + " " + (lead or "")).strip()
     issues = consistency_issues(source or "", copy)
+    from app.newsroom.public_copy import unpublishable_copy_reason
+    reason = unpublishable_copy_reason(headline, lead)
+    if reason:
+        issues.append(reason)
     if copy and not is_persian_public_text(copy):
         issues.append("FOREIGN_OUTPUT")
 

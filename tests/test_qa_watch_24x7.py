@@ -57,6 +57,14 @@ def test_1646_arabic_leak_and_invented_attribution_are_rejected():
     assert _story_issues(SOURCE, GOOD_HEADLINE, GOOD_LEAD) == []
 
 
+def test_qa_flags_mixed_script_and_cut_off_lead():
+    issues = _story_issues(
+        "A political impasse between the KRG and PUK threatens the region.",
+        "اختلاف سیاسی کrg و پوک تهدید به تجزیه منطقه کردستان",
+        "تشدید اختلاف سیاسی بین ح")
+    assert "HOLD_TRANSLATION_QUALITY" in issues
+
+
 def test_short_country_aliases_are_token_bounded():
     issues = translation_lost_entities(
         "Russia-Ukraine truce talks continue",
