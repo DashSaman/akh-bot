@@ -15,11 +15,12 @@ from datetime import datetime, timedelta, timezone
 
 from app.brand import load_brand
 from app.config import get_settings
+from app.core.textnorm import is_native_persian, normalize_text_for_hash
 from app.db.database import Database
 from app.db.repo import PublicationsRepo, SettingsRepo, utcnow
 from app.integrations.llm.router import FreeAiRouter
 from app.newsroom.story_evolution import render_v2_public_text
-from app.newsroom.translator import consistency_issues, translate_event
+from app.newsroom.translator import consistency_issues, translate_event, translation_source_language
 from app.publishing.telegram_bot import is_persian_public_text
 
 log = logging.getLogger("akh.qa_watch")
@@ -33,14 +34,17 @@ def _foreign_evidence(db: Database, event_id: int) -> dict | None:
         " COALESCE(NULLIF(s.identity,''),s.name) source_name"
         " FROM event_items ei JOIN raw_items r ON r.id=ei.raw_item_id"
         " JOIN sources s ON s.id=r.source_id"
-        " WHERE ei.event_id=? AND r.language NOT LIKE 'fa%'"
-        " AND r.language NOT IN ('','und')"
+        " WHERE ei.event_id=?"
         " ORDER BY ei.is_duplicate ASC,r.published_at ASC,r.id ASC",
         (event_id,),
     )
+    rows = [r for r in rows if not is_native_persian(str(r.get("text") or r.get("title") or ""))
+            and translation_source_language(str(r.get("language") or ""),
+                                            str(r.get("text") or r.get("title") or "")) not in ("", "und", "fa")]
     if not rows:
         return None
-    lang = str(rows[0].get("language") or "").split("-", 1)[0].lower()
+    lang = translation_source_language(str(rows[0].get("language") or ""),
+                                       str(rows[0].get("text") or rows[0].get("title") or ""))
     title = next((str(r.get("title") or "").strip() for r in rows if r.get("title")), "")
     chunks: list[str] = []
     for row in rows:
@@ -59,6 +63,32 @@ def _foreign_evidence(db: Database, event_id: int) -> dict | None:
         "evidence": "\n".join(chunks)[:4000],
         "source_names": names,
     }
+
+
+def _native_original(db: Database, story: dict) -> bool:
+    """Only audit translations; legacy originals need a matching native report."""
+    try:
+        draft = json.loads(story.get("draft_json") or "{}")
+    except (TypeError, ValueError):
+        draft = {}
+    if draft.get("translated") is True or draft.get("qa_repaired"):
+        return False
+    current_copy = "\n".join(str(p) for p in (
+        story.get("headline"), story.get("lead"), *draft.get("details", [])) if p)
+    if draft.get("translated") is False and is_native_persian(current_copy):
+        return True
+    # Match the complete headline AND all body details against one report.
+    # A Persian item elsewhere in the event is not enough to exempt a translation.
+    parts = [story.get("headline"), story.get("lead"), *draft.get("details", [])]
+    parts = [normalize_text_for_hash(p) for p in parts if p]
+    if not parts:
+        return False
+    for row in db.query("SELECT r.title,r.text FROM event_items ei JOIN raw_items r"
+                        " ON r.id=ei.raw_item_id WHERE ei.event_id=?", (story["event_id"],)):
+        raw = str(row.get("title") or "") + "\n" + str(row.get("text") or "")
+        if is_native_persian(raw) and all(p in normalize_text_for_hash(raw) for p in parts):
+            return True
+    return False
 
 
 def _story_issues(source: str, headline: str, lead: str) -> list[str]:
@@ -126,6 +156,8 @@ async def qa_pass(db: Database, settings, brand, router, *,
         state.set("qa_watch_last_run", utcnow())
 
     for story in _recent_sent_stories(db, window_minutes):
+        if _native_original(db, story):
+            continue
         evidence = _foreign_evidence(db, int(story["event_id"]))
         if not evidence or not evidence["evidence"]:
             continue
@@ -213,6 +245,7 @@ async def qa_pass(db: Database, settings, brand, router, *,
             "platform_variants": {"telegram": text},
             "generation_mode": "QA_REPAIR",
             "qa_repaired": True,
+            "translated": True,
         })
         version = int(story["version"]) + 1
         now = utcnow()

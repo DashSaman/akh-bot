@@ -79,12 +79,60 @@ def title_hash(title: str) -> str:
     return hashlib.sha256(normalize_title(title).encode()).hexdigest()
 
 
-_PERSIAN_ONLY = set("پچژگآ")
+_PERSIAN_ONLY = set("پچژگکی")
 _ARABIC_ONLY = set("يكةىؤإ")
+_FA_WORDS = set(("را از در با برای این آن یک است شد شدند کرد کردند گفت گفتند می نمی "
+                 "خواهد دارد دارند امروز افزایش کاهش یافت رسید داد اعلام").split())
+_AR_WORDS = set(("في من على عن أن إن إلى الى التي الذي هذا هذه مع قد لا ما لم لن "
+                 "كان كانت يكون قال قالت أعلن أعلنت اليوم عاجل بعد بين عبر نحو أكثر حتى حيث حول").split())
+_AR_WORDS = {w.replace("ي", "ی").replace("ك", "ک") for w in _AR_WORDS}
+
+
+def language_content(text: str) -> str:
+    """Exclude metadata from language detection; a footer is not evidence."""
+    lines = []
+    for line in (text or "").splitlines():
+        line = line.strip()
+        if line.startswith(("—", "منبع:", "منابع:", "🆔")):
+            continue
+        line = re.sub(r"https?://\S+|t\.me/\S+|@[A-Za-z0-9_]{3,}", " ", line)
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _language_scores(text: str) -> tuple[int, int]:
+    words = set(re.findall(r"[^\W\d_]+", normalize_text_for_hash(text)))
+    return len(words & _FA_WORDS), len(words & _AR_WORDS)
+
+
+def is_native_persian(text: str) -> bool:
+    """Positive Persian syntax, independent of source labels or Latin names.
+
+    Ambiguous shared-script text stays on the configured-source path. Each
+    substantive sentence must qualify, so a Persian line cannot mask a foreign
+    paragraph. This is routing evidence, not a substitute for publication QA.
+    """
+    content = language_content(text)
+    parts = [p for p in re.split(r"[\n.!?؟]+", content) if any(c.isalpha() for c in p)]
+    if not parts:
+        return False
+    for part in parts:
+        letters = [c for c in part if c.isalpha()]
+        fa, ar = _language_scores(part)
+        if (fa < 2 or fa <= ar or
+                sum("\u0600" <= c <= "\u06ff" for c in letters) / len(letters) < 0.5):
+            return False
+    return True
 
 
 def detect_language(text: str) -> str:
-    t = text or ""
+    t = language_content(text)
+    fa, ar = _language_scores(t)
+    # Arabic grammar wins over Persian letters in names (e.g. عراقچی).
+    if ar >= 2 and ar > fa:
+        return "ar"
+    if is_native_persian(t):
+        return "fa"
     if any(ch in _PERSIAN_ONLY for ch in t):
         return "fa"
     if any(ch in _ARABIC_ONLY for ch in t) or "\u0627" in t:

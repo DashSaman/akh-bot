@@ -5,9 +5,9 @@ draft. Any failure → HELD (NEEDS_LANGUAGE_PROCESSING); raw foreign text NEVER
 reaches publishers (fail-closed, unchanged).
 
 PART-5 hardening:
-- SOURCE LANGUAGE IS AUTHORITATIVE (§8): a configured foreign source language
-  (ar/en/he/tr/ru/…) forces the translation path even when shared-script
-  heuristics would call the text Persian. Content-level checks stay in place.
+- Clear Persian syntax stays native, including Persian reports with Latin names.
+  Ambiguous copy retains the configured foreign-source translation requirement;
+  source names and footers never establish a report's language.
 - consistency audit (§7): invented numbers, changed figures/dates, negation
   reversal, certainty escalation — any hit rejects the translation (HOLD).
 - cache (§10): successful translations keyed by content hash + prompt version;
@@ -50,7 +50,7 @@ CRITICAL canonical spelling: Araghchi/Araqchi/عباس عراقچي/عباس ع�
 Headline = one clear Persian sentence with actor+action.
 OUTPUT JSON only: {"headline": "...", "lead": "..."} (headline <= 110 chars)."""
 
-# configured source languages that ALWAYS require translation (§8)
+# Configured languages that require translation unless the report is clearly Persian.
 FOREIGN_SOURCE_LANGS = {"ar", "en", "he", "tr", "ru", "fr", "de", "ur", "ps"}
 
 # Evidence from live probes keeps GPT-OSS first for English. For Arabic,
@@ -173,13 +173,26 @@ def needs_translation(text: str) -> bool:
 
 
 def needs_translation_for(source_language: str, text: str) -> bool:
-    """§8: the CONFIGURED source language is authoritative — ar/en/he/… force
-    the translation path even when shared-script heuristics look Persian
-    (a Persian footer/source name must never mask Arabic content)."""
-    lang = (source_language or "").strip().lower()
+    """Clear Persian stays native; ambiguous copy keeps its source-language gate."""
+    from app.core.textnorm import is_native_persian
+
+    if is_native_persian(text):
+        return False
+    lang = (source_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
     if lang in FOREIGN_SOURCE_LANGS:
         return True
     return needs_translation(text)
+
+
+def translation_source_language(source_language: str, text: str) -> str:
+    """Correct a Persian/unknown label when the content is clearly foreign."""
+    from app.core.textnorm import detect_language
+
+    lang = (source_language or "").strip().lower().replace("_", "-").split("-", 1)[0]
+    detected = detect_language(text)
+    if lang in ("", "und", "fa") and detected in FOREIGN_SOURCE_LANGS:
+        return detected
+    return lang
 
 
 def _numbers(text: str) -> set[str]:
