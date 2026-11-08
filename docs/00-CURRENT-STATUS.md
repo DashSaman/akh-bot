@@ -1,5 +1,16 @@
 # 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
 
+## 2026-11-08 publication-quality and safe-disk checkpoint
+
+- فارسی: ریشهٔ اعلان عمومی «اشکال در ترجمه» در ناظر مستقل کیفیت پیدا شد: شکست اصلاح، یک ویرایش عمومیِ اعلان خطا تولید می‌کرد. اکنون شکست فقط HOLD داخلی می‌شود؛ اعلان خطا، امتناع مترجم و اعلانِ صرف برنامهٔ رادیویی در مرزهای انتشار نیز مسدود می‌شوند. صف قدیمی و کش ترجمه دوباره کنترل می‌شوند. اصلاح قدیمی ناظر حق بازنویسی نسخهٔ جدیدتر خبر را ندارد.
+- English: the independent QA watcher queued a public translation-review notice when repair failed. Failure now records an internal hold. Shared copy checks reject operational notices/refusals and broadcast-only announcements in translation/cache, queue execution and all Telegram publisher paths. QA updates use optimistic version checks; duplicate jobs preserve existing SENT history.
+- فارسی: پاک‌سازی با فهرست دقیق و کنترل پردازش/اتصال انجام شد: ۱۴۶ مورد موقت، ۱۳۲ ایمیج قدیمی و یک کش پژوهشیِ بدون استفاده حذف شدند؛ ۵ رکورد ایمیج دیگر توسط خود Docker همراه وابستگی‌های آزاد حذف شده بودند. نسخه‌های فعال و اخیر، پایگاه‌های داده و دیسک Android حفظ شدند. فضای آزاد از حدود ۵۹۴ MiB به ۳٫۹ GiB رسید؛ ۱۰ کانتینر، ۳۴ سرویس و ۴۵ ورودی TCP بدون ریستارت حفظ شدند.
+- English: manifest-based cleanup removed 146 disposable temporary entries, 132 old unused image records and one unused sparse research cache; Docker had already removed five further parent records during dependency cleanup. Active/recent rollback images, databases and Android state were retained. Free space rose from ~594 MiB to ~3.9 GiB; snapshots show unchanged 10 running containers, 34 services and 45 TCP listeners, with no restart during cleanup.
+- Verification: 26 focused regressions PASS; complete isolated Linux suite **533 PASS** (24 existing deprecation warnings). Windows full-suite baseline had three platform failures (two POSIX deployment-script tests and symlink privilege). Linux harness normalizes checkout shell-script line endings and uses temporary bootstrap data, without production volumes or credentials.
+- Read-only reconstruction from each story's latest SENT payload found 13 suspect historical messages: 8 translation-review notices and 5 broadcast-only announcements. This is ledger evidence, not direct confirmation of current Telegram contents; no blind replacement/deletion was performed.
+- Remaining operational findings: the existing daily cleanup timer was already disabled; it was not silently re-enabled. nine-router has a large live JSON log without configured rotation; it was not truncated or restarted. Long media captions still use the existing length-limited rendering and merit a separate complete-copy change.
+- Source changes are staged for review/deployment; this checkpoint alone does not assert a new live release. See docs/incidents/2026-11-08-public-translation-notices.md.
+
 ## 2026-10-12 independent reconciliation / FCC decision
 - **Repository HEAD:** c907d716 at the documented 2026-10-12 source-sync checkpoint (for the latest SHA, use git rev-parse HEAD and GitHub CI).
 - **Production runtime SHA:** edd819a (**historical 2026-10-06 only**, NOT the current running image SHA); current image revision remains **UNVERIFIED** because its metadata lacks an immutable Git revision label.

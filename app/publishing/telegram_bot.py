@@ -214,6 +214,9 @@ def public_body_is_substantive(text: str) -> bool:
     t = (text or "").strip()
     if not t:
         return False
+    from app.newsroom.public_copy import unpublishable_copy_reason
+    if unpublishable_copy_reason(t):
+        return False
     # strip markup/footer/source lines (mirror of build_public_text assembly)
     for line in list(_SOURCE_LINE_RE.finditer(t)):
         pass
@@ -535,7 +538,8 @@ def is_persian_public_text(text: str) -> bool:
 
 def publisher_language_gate(text: str) -> bool:
     """LAST-CHANCE fail-closed gate before ANY public API call."""
-    return story_content_language_check(text) and not any(
+    from app.newsroom.public_copy import unpublishable_copy_reason
+    return not unpublishable_copy_reason(text) and story_content_language_check(text) and not any(
         marker in text for marker in ("پیش‌نمایش سکوی خبری", "نام نهایی هنوز انتخاب نشده است")
     )
 

@@ -1,0 +1,28 @@
+# Public translation notices / اعلان عمومی خطای ترجمه
+
+## Cause / علت
+
+The live post-publication QA watcher used a separate old image. If a translation repair was unavailable or rejected, it queued a `publish_edit` containing an operational review notice. The notice was Persian and long enough to pass the final body/language checks. Successful QA repairs also used that old image's renderer, which predated the translated-lead fix. A read-only ledger audit found 177 historical completed jobs containing translation-related text; this is not a count of currently broken public messages.
+
+ناظر مستقلِ نسخهٔ قدیمی در صورت شکست اصلاح ترجمه، اعلان بازبینی را در صف ویرایش عمومی قرار می‌داد. دروازهٔ نهایی این متن فارسی را محتوای خبری حساب می‌کرد. همان ایمیج قدیمی، اصلاح جدیدِ نمایش لید را هم نداشت. در سابقهٔ کارها ۱۷۷ مورد متن مرتبط با ترجمه پیدا شد؛ این عدد تعداد پیام‌های خرابِ فعلی کانال نیست.
+
+## Changes / اصلاحات
+
+- Failed QA repair records an internal `HOLD_TRANSLATION_QUALITY`, without queuing a public notice or making a new publication row.
+- Operational notices/refusals are rejected in fresh/cached translation, final queue execution (SEND, EDIT and legacy handler), and all publisher API boundaries, including photos/videos.
+- Broadcast-only program announcements without reporting are rejected. Real reporting and attributed quotes using words such as “cannot” remain allowed.
+- Duplicate executions keep prior SENT ledger rows. QA discards results when the story advanced during the provider await, and conditionally updates by original version/timestamp.
+- Short country aliases US/UK/UAE have letter boundaries; Russia/Ukraine no longer spuriously imply missing US/UK entities. Arabic newsroom-token leakage checks include the reproduced “عشرات” case.
+- The previously isolated watcher source and tests are now tracked with the app, so both services can run the same release and renderer.
+
+شکست اصلاح فقط در وضعیت داخلی ثبت می‌شود؛ اعلان خطا به کانال نمی‌رود. کش، صف قدیمی و همهٔ مسیرهای متن/عکس/ویرایش نیز کنترل می‌شوند. اعلان برنامهٔ رادیویی بدون متن خبر مسدود است، اما خبر واقعی و نقل‌قول معتبر با واژه‌های مشابه حذف نمی‌شود. سوابق واقعی ارسال حفظ می‌شوند و نتیجهٔ قدیمی ناظر نمی‌تواند نسخهٔ جدید خبر را بازنویسی کند. خطای تشخیص US/UK در Russia/Ukraine و یک نمونه نشت واژهٔ عربی نیز اصلاح شدند. کد ناظر اکنون کنار اپ ثبت شده تا هر دو سرویس نسخهٔ یکسان داشته باشند.
+
+## Verification / آزمون
+
+Before the fix, the exact production review notice passed both final checks and all four Telegram API methods; regression tests failed as expected. Failed-repair QA created an edit job. A concurrency reproduction advanced the story from version 1 to 5 during translation; old QA reset it to version 2 and queued an obsolete edit. These cases now pass, along with the real-news false-positive controls.
+
+پیش از اصلاح، اعلان واقعیِ محیط زنده از هر دو دروازه و هر چهار روش انتشار تلگرام عبور می‌کرد. شکست اصلاح ناظر نیز کار ویرایش می‌ساخت. در آزمون هم‌زمانی، نسخهٔ جدید ۵ به نسخهٔ قدیمی ۲ بازمی‌گشت. آزمون‌های این موارد و کنترل خبرهای سالم اکنون موفق‌اند. نتیجهٔ مجموعهٔ کامل Linux و استقرار پس از اجرا ثبت می‌شود.
+
+The complete isolated Linux run passed **533 tests** (24 existing deprecation warnings); 26 focused regressions passed locally. Latest-SENT payload reconstruction identified 13 historical suspect messages (8 review notices, 5 broadcast-only announcements); direct current Telegram contents were not inspected. No historical public message has been blindly deleted or replaced with an unvalidated draft. The correction does not claim automatic semantic understanding of every possible news item. Existing evidence, attribution, verification and language gates remain in force.
+
+مجموعهٔ کامل Linux با ۵۳۳ آزمون موفق و ۲۴ هشدار منسوخ‌شدنِ قبلی اجرا شد؛ ۲۶ آزمون متمرکز نیز موفق بود. بازسازی آخرین ارسال‌ها از دفتر انتشار، ۱۳ پیام تاریخی مشکوک نشان داد: ۸ اعلان بازبینی و ۵ اعلان برنامه؛ محتوای فعلی تلگرام مستقیماً کنترل نشده است. هیچ پیام تاریخی به‌صورت کور حذف یا با پیش‌نویس تأییدنشده جایگزین نشده است. این اصلاح ادعای فهم معنایی کامل همهٔ خبرها را ندارد؛ کنترل‌های شواهد، انتساب، راستی‌آزمایی و زبان برقرارند.
