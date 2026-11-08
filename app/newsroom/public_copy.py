@@ -18,6 +18,9 @@ _ERROR_NOTICES = tuple(re.compile(p, re.I) for p in (
 ))
 _BROADCAST = re.compile(
     r"^(?:تازه\s*ترین|آخرین|جدیدترین)\s+(?:خبرها|اخبار|خبرهای).{0,180}(?:رادیو|پادکست|برنامه)")
+_MIXED_WORD = re.compile(r"[A-Za-z][\u0621-\u064a\u0671-\u06d3]|[\u0621-\u064a\u0671-\u06d3][A-Za-z]")
+_DANGLING_END = re.compile(
+    r"(?:^|\s)(?:در|از|به|برای|بین|و|که|با|درباره|اگر|را|اما|یا|[\u0621-\u064a\u0671-\u06d3])\s*[.!؟،؛:]*$")
 
 
 def unpublishable_copy_reason(headline: str, body: str = "") -> str | None:
@@ -33,6 +36,10 @@ def unpublishable_copy_reason(headline: str, body: str = "") -> str | None:
             lines.append(line)
     if any(p.search(line) for line in lines for p in _ERROR_NOTICES):
         return "HOLD_TRANSLATION_QUALITY"
+    if any(_MIXED_WORD.search(line) for line in lines):
+        return "HOLD_TRANSLATION_QUALITY"
+    if any(_DANGLING_END.search(line) or line.endswith(("…", "...")) for line in lines):
+        return "CONTEXT_INCOMPLETE"
     # A program announcement without actual reporting is not a standalone news item.
     non_generic = [line for line in lines if not line.startswith((
         "این ادعا تا این لحظه به تأیید مستقل نرسیده", "پایش ادامه دارد"))]

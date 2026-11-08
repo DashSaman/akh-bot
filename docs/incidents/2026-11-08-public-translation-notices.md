@@ -1,5 +1,15 @@
 # Public translation notices / اعلان عمومی خطای ترجمه
 
+## Follow-up readability regression / تکمیل کنترل متن ناقص
+
+Inspection of a completed SEND job found a mixed-script entity (`کrg`) and a lead cut off at a single letter. Its publication was actually **SKIPPED / QUALITY_MATERIALITY_FLOOR**, with no remote ID; a completed outbox job is not proof of a public send. Add independent rejection of mixed Persian/Latin words, dangling connector/single-letter endings and ellipses in any content paragraph. Translation candidates/cache, publisher boundaries and QA use the same check. Proper separated acronyms such as KRG/PUK remain allowed.
+
+در بررسی یک کار پایان‌یافته، نام مخلوط و لید قطع‌شده پیدا شد؛ اما دفتر انتشار نشان داد همان مورد به‌دلیل ارزش خبری پایین رد شده و شناسهٔ تلگرام ندارد. پایان کارِ صف به معنی ارسال عمومی نیست. اکنون این عیب مستقل از ارزش خبری کنترل می‌شود: واژهٔ مخلوط فارسی/لاتین، پایان بریده با حرف منفرد یا حرف ربط و سه‌نقطهٔ ناقص در هر بند رد می‌شود؛ مخفف‌های جدا و صحیح مجازند. انتشار برای اعمال این اصلاح موقتاً متوقف و پس از بررسی نسخهٔ جدید به وضعیت قبلی بازگردانده می‌شود.
+
+Long original-media captions now fall back to one complete text post; the publisher no longer slices the news at the caption boundary. Oversized text is blocked, and an existing photo is not edited with a sliced caption. Permanent `BLOCKED_*` results mark the attempted publication SKIPPED and complete the outbox job without failure retries; existing SENT target/history stays intact. Focused publisher/QA/media regressions: 53 PASS.
+
+کپشن بلند اکنون به یک پیام متنیِ کامل تبدیل می‌شود؛ خبر در مرز طول مجاز بریده نمی‌شود. متن بیش‌ازحد بلند متوقف می‌شود و عکس قبلی با کپشن نصفه ویرایش نمی‌شود. خطای دائمی با وضعیت SKIPPED ثبت می‌شود و بیهوده تکرار نخواهد شد؛ سابقهٔ ارسال واقعی و شناسهٔ قبلی حفظ می‌شود. ۵۳ آزمون مرتبط موفق بود.
+
 ## Cause / علت
 
 The live post-publication QA watcher used a separate old image. If a translation repair was unavailable or rejected, it queued a `publish_edit` containing an operational review notice. The notice was Persian and long enough to pass the final body/language checks. Successful QA repairs also used that old image's renderer, which predated the translated-lead fix. A read-only ledger audit found 177 historical completed jobs containing translation-related text; this is not a count of currently broken public messages.

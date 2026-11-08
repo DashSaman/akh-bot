@@ -324,8 +324,11 @@ class TelegramBotPublisher:
     async def send_message(self, text: str) -> dict[str, Any]:
         if not publisher_language_gate(text):
             return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
+        html = to_telegram_html(text)
+        if len(html) > 4096:
+            return {"ok": False, "error": "BLOCKED_TEXT_LENGTH"}
         data = await self._api("sendMessage", {
-            "chat_id": self.chat_id, "text": to_telegram_html(text)[:4096], "parse_mode": "HTML",
+            "chat_id": self.chat_id, "text": html, "parse_mode": "HTML",
             "disable_web_page_preview": True})
         if data.get("ok"):
             return {"ok": True, "message_id": data["result"]["message_id"]}
@@ -336,13 +339,10 @@ class TelegramBotPublisher:
         import os as _os
         if not publisher_language_gate(caption):
             return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
-        # Markdown markers must NEVER reach Telegram (owner screenshot regression):
-        # clip raw text (never splitting a ** pair), then convert to HTML.
+        # Keep the complete story if it cannot fit an original-media caption.
         cap = caption or ""
-        if len(cap) > 1020:
-            cap = cap[:1020]
-            if cap.count("**") % 2:
-                cap = cap.rsplit("**", 1)[0].rstrip()
+        if len(to_telegram_html(cap)) > 1020:
+            return await self.send_message(caption)
         field = 'video' if video else 'photo'
         try:
             fh = open(path, 'rb')
@@ -378,10 +378,8 @@ class TelegramBotPublisher:
         cap = caption or ""
         if not publisher_language_gate(cap):
             return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
-        if len(cap) > 1020:
-            cap = cap[:1020]
-            if cap.count("**") % 2:
-                cap = cap.rsplit("**", 1)[0].rstrip()
+        if len(to_telegram_html(cap)) > 1020:
+            return await self.send_message(caption)
         method = "sendVideo" if video else "sendPhoto"
         field = "video" if video else "photo"
 
@@ -431,9 +429,12 @@ class TelegramBotPublisher:
     async def edit_message(self, message_id: str, text: str) -> dict[str, Any]:
         if not publisher_language_gate(text):
             return {"ok": False, "error": "BLOCKED_LANGUAGE_GATE"}
+        html = to_telegram_html(text)
+        if len(html) > 4096:
+            return {"ok": False, "error": "BLOCKED_TEXT_LENGTH"}
         try:
             payload = {"chat_id": self.chat_id, "message_id": int(message_id),
-                       "text": to_telegram_html(text)[:4096], "parse_mode": "HTML",
+                       "text": html, "parse_mode": "HTML",
                        "disable_web_page_preview": True}
         except ValueError:
             return {"ok": False, "error": "bad message id"}
@@ -444,12 +445,11 @@ class TelegramBotPublisher:
         # CAPTION, not text — editMessageText rejects them ("no text in the
         # message to edit"). Retry once with editMessageCaption.
         if "no text in the message" in str(data.get("description", "")).lower():
-            cap = text[:1020]
-            if cap.count("**") % 2:
-                cap = cap.rsplit("**", 1)[0].rstrip()
+            if len(html) > 1020:
+                return {"ok": False, "error": "BLOCKED_CAPTION_LENGTH"}
             data = await self._api("editMessageCaption", {
                 "chat_id": self.chat_id, "message_id": int(message_id),
-                "caption": to_telegram_html(cap), "parse_mode": "HTML"})
+                "caption": html, "parse_mode": "HTML"})
             if data.get("ok"):
                 return {"ok": True}
         return {"ok": False, "error": f"telegram: {data.get('description', '?')}"}

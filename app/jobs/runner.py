@@ -141,6 +141,13 @@ def _public_copy_blocked(db, story, platform, payload_hash, text, pubs) -> bool:
     return True
 
 
+def _record_publish_rejection(pubs, pub_id, result) -> bool:
+    error = str(result.get("error") or "")
+    permanent = error.startswith("BLOCKED_")
+    pubs.mark(pub_id, "SKIPPED" if permanent else "FAILED", error=error)
+    return permanent
+
+
 def _sent_in_current_chat(db, settings, story_id: int, platform: str) -> dict | None:
     current_chat = getattr(settings, "telegram_publish_target", "") if platform == "telegram" else ""
     prior = db.query_one(
@@ -294,8 +301,7 @@ def make_send_handler(db: Database, settings: Settings,
             pubs.mark(pub_id, "SENT", remote_id=str(result.get("message_id", "")))
             stories.mark_published(story_id)
             return True
-        pubs.mark(pub_id, "FAILED", error=result.get("error"))
-        return False
+        return _record_publish_rejection(pubs, pub_id, result)
 
     return handler
 
@@ -344,8 +350,7 @@ def make_edit_handler(db: Database, settings: Settings,
             pubs.mark(pub_id, "SENT", remote_id=str(prior["remote_id"]))
             stories.mark_published(story_id)
             return True
-        pubs.mark(pub_id, "FAILED", error=result.get("error"))
-        return False
+        return _record_publish_rejection(pubs, pub_id, result)
 
     return handler
 
@@ -436,8 +441,7 @@ def make_publish_handler(db: Database, settings: Settings,
                 pubs.mark(pub_id, "SENT", remote_id=str(prior["remote_id"]))
                 stories.mark_published(story_id)
                 return True
-            pubs.mark(pub_id, "FAILED", error=result.get("error"))
-            return False
+            return _record_publish_rejection(pubs, pub_id, result)
 
         if pubs.new_posts_since(now - timedelta(hours=1)) >= settings.max_posts_per_hour:
             return False
@@ -452,7 +456,6 @@ def make_publish_handler(db: Database, settings: Settings,
             pubs.mark(pub_id, "SENT", remote_id=str(result.get("message_id", "")))
             stories.mark_published(story_id)
             return True
-        pubs.mark(pub_id, "FAILED", error=result.get("error"))
-        return False
+        return _record_publish_rejection(pubs, pub_id, result)
 
     return handler
