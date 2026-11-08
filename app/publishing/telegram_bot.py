@@ -526,6 +526,10 @@ def story_content_language_check(text: str) -> bool:
         return False
     fa = sum(1 for c in letters if "؀" <= c <= "ۿ")
     lat = sum(1 for c in letters if c.isascii() and c.isalpha())
+    from app.core.textnorm import is_native_persian
+    if lat and is_native_persian(content) and all(
+            c.isascii() or "؀" <= c <= "ۿ" for c in letters):
+        return True
     if lat / len(letters) > 0.3:
         return False
     return fa / len(letters) >= 0.6

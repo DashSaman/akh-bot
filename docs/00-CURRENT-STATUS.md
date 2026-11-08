@@ -1,5 +1,12 @@
 # 00-CURRENT-STATUS — dated audit checkpoints (Telegram-only)
 
+## Native Persian routing — 2026-11-08 / مسیر خبر فارسی
+
+- فارسی: تشخیص زبان متن فارسی دارای نام لاتین و عربی دارای «آ» اصلاح شد. فارسی روشن بدون ترجمه حفظ و وضعیت ترجمه در پیش‌نویس ثبت می‌شود. ناظر ترجمه، نسخهٔ فارسی اصلی را صرفاً به‌دلیل گزارش خارجی متفاوت بازترجمه نمی‌کند. متن مبهم و خارجی همچنان کنترل انتشار دارند؛ صف تاریخی به‌صورت گروهی بازگردانده نشد.
+- English: content syntax replaces single-letter assumptions for routing. Clear Persian with Latin entities stays native; Arabic mislabeled fa gets the Arabic model route. V2 persists translation provenance; QA recognizes native originals instead of retranslating them against a different foreign report. Ambiguous/foreign copy remains gated. See `docs/incidents/2026-11-08-native-persian-routing.md`.
+- Android cleanup, explicitly requested after the prior retention checkpoint: no dedicated Android container existed. Unused SDK, AVD/emulator and matching temporary assets removed (~287 MiB allocated); only idle ADB port 5037 closed. Existing 2-id application/API/Postgres containers and other services remained running with unchanged IDs/start times/restarts; API health HTTP 200. فارسی: حذف اندروید با حفظ سرویس‌های فعال و کنترل اتصال/پردازش انجام شد؛ فایل ۶ GiB پراکنده فقط بخشی از فضای واقعی حذف‌شده بود.
+- Code validation and deployment: pending the current isolated Linux full-suite run; the previous live release remains the checkpoint below until rollout verification.
+
 ## Final verified release — 2026-11-08 / نسخهٔ نهایی بررسی‌شده
 
 - **Current live image:** `akhbot-app:quality-50fa9e5`; app and watcher revision `50fa9e569f2d48765ee3f46aded48e692d1d9362`. App healthy/HTTP 200, watcher running, zero restarts. All 99 app Python/SQL files matched the release source (line endings normalized). PRs #12 and #13 are merged.

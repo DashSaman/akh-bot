@@ -25,7 +25,7 @@ import logging
 import threading
 from datetime import datetime, timedelta, timezone
 
-from app.core.textnorm import sha256_hex
+from app.core.textnorm import is_native_persian, sha256_hex
 from app.db.database import Database
 from app.db.repo import (
     EventsRepo, JobsRepo, PublicationsRepo, RawItemsRepo, SettingsRepo,
@@ -41,7 +41,7 @@ from app.newsroom.event_fingerprint import (
 from app.newsroom.materiality import is_material_update
 from app.newsroom.source_context import resolve_context
 from app.newsroom.story_evolution import build_v2_content, render_v2_public_text
-from app.newsroom.translator import needs_translation_for, translate_event_sync
+from app.newsroom.translator import needs_translation_for, translate_event_sync, translation_source_language
 from app.publishing.telegram_bot import is_persian_public_text
 from app.newsroom.diversity import defer_for_diversity, story_source_identities
 from app.newsroom.iran_policy import crisis_active, defer_for_iran_capacity
@@ -591,25 +591,25 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
     # PERSIAN claims; foreign claims remain traceable evidence and never
     # block a publishable Persian story. Translation applies ONLY when the
     # event has no usable Persian claim at all.
-    if not is_persian_public_text(content["headline"] + " " + " ".join(content["details"])):
+    if needs_translation_for("", content["headline"] + "\n" + "\n".join(content["details"])):
         persian_claims = [dict(c) for c in claims
-                          if is_persian_public_text((c.get("text") or ""))]
+                          if not needs_translation_for("", c.get("text") or "")]
         if persian_claims:
             persian_content = build_v2_content(
                 event, persian_claims,
                 max_details=int(getattr(settings, "max_public_story_details", 5)))
             if persian_content is not None:
                 content = persian_content  # Persian story; foreign text never publishes
-    foreign_lang = ""
-    if not is_persian_public_text(content["headline"] + " " + " ".join(content["details"])):
-        foreign_lang = _event_source_language(db, event["id"])
     evidence = content["headline"] + "\n" + "\n".join(content["details"])
-    # §FA-FIRST: Persian claim won the headline → the content is already
-    # Persian; configured foreign source language must not force a
-    # redundant translation (which was the entire held-backlog bottleneck).
-    if foreign_lang and is_persian_public_text(evidence):
-        foreign_lang = ""
-    if foreign_lang and needs_translation_for(foreign_lang, evidence):
+    foreign_lang = translation_source_language(_event_source_language(db, event["id"]), evidence)
+    # Native Persian claims win even in a foreign-source event. Normalize only
+    # letter variants for display; retain the original raw evidence and claims.
+    if not needs_translation_for("", evidence):
+        if is_native_persian(evidence):
+            for key in ("headline", "lead"):
+                content[key] = content[key].replace("ي", "ی").replace("ك", "ک")
+            content["details"] = [d.replace("ي", "ی").replace("ك", "ک") for d in content["details"]]
+    elif needs_translation_for(foreign_lang, evidence):
         # THRASH-FIX: per-pass budget + exponential backoff so a saturated
         # free-tier AI pool is spent on NEW translations instead of retrying
         # the same held events every pass (~3min) forever.
@@ -670,7 +670,7 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
                  "details": content["details"], "source_names": src_names,
                  "platform_variants": {"telegram": text}, "generation_mode": "DETERMINISTIC",
                  "claim_refs": [str(c["id"]) for c in claims],
-                 "language": "fa", "topic": "V2"}
+                 "language": "fa", "topic": "V2", "translated": bool(content.get("translated"))}
         story_id = stories.create(event["id"], content["headline"], content["lead"], draft)
         db.execute("UPDATE stories SET lifecycle=? WHERE id=?", (content["lifecycle"], story_id))
         _attach_event_media(db, settings, event["id"], story_id, content["headline"],
@@ -701,6 +701,7 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
                                   "V2 content refresh before first send",
                                   {"headline": content["headline"], "lead": content["lead"],
                                    "details": content["details"],
+                                   "translated": bool(content.get("translated")),
                                    "platform_variants": {"telegram": text}})
         pub_id = PublicationsRepo(db).upsert(story["id"], "telegram", ph,
                                              int(stories.get(story["id"])["version"]))
@@ -726,6 +727,7 @@ def _publish_event(db, settings, brand, event: dict, summary: dict) -> None:
                               x for r in material_rows for x in (r["material_reasons"] or "").split(",") if x})),
                           {"headline": content["headline"], "lead": content["lead"],
                            "details": content["details"],
+                           "translated": bool(content.get("translated")),
                            "platform_variants": {"telegram": text}})
     version = int(stories.get(story["id"])["version"])
     pub_id = PublicationsRepo(db).upsert(story["id"], "telegram", ph, version)
