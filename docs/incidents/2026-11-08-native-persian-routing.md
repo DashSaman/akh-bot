@@ -40,6 +40,11 @@ No historical mass relabeling, public test post, or blind backlog retry is used.
 
 Regression tests reproduce source misclassification, Latin-name translation,
 Arabic letter variants, Arabic evidence mislabeled fa, mixed foreign paragraphs,
-and QA retranslation of a native original. Run `python -m pytest tests -q` in the
-isolated Linux harness before production rollout. Deployment results are recorded
-in the latest checkpoint in `docs/00-CURRENT-STATUS.md`.
+and QA retranslation of a native original. Full isolated Linux run: **570 passed**,
+28 deprecation warnings; GitHub CI test/build succeeded (42494251724). Both live
+containers use revision `b99930f182b2a70b77b46e2628b66209990349e0`; all 99 app
+Python/SQL files match the source. No-network runtime checks pass in each container.
+App/API health 200; other containers, service units and ports unchanged.
+فارسی: ۵۷۰ تست لینوکس موفق؛ کنترل داخل هر دو سرویس فعال هم موفق بود. هیچ
+ارسال آزمایشی عمومی انجام نشد و نسخهٔ پیشین برای بازگشت حفظ شد.
+Deployment details are in `docs/00-CURRENT-STATUS.md`.
