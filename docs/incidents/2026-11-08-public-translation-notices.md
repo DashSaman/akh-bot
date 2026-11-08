@@ -1,5 +1,11 @@
 # Public translation notices / اعلان عمومی خطای ترجمه
 
+## Final deployment result / نتیجهٔ استقرار نهایی
+
+Both services were moved to `akhbot-app:quality-50fa9e5`, revision `50fa9e569f2d48765ee3f46aded48e692d1d9362`, on 2026-11-08 at 14:42 UTC. Publication pause was restored to its prior empty value at 14:43:24 UTC. Nine pending current-version jobs that completed during the pause were safely requeued, then all nine completed. Existing SENT publications were not requeued. Final app health returned HTTP 200; app/watch restart counts were zero; 99 source Python/SQL files matched in both containers after line-ending normalization. Full Linux suite: 547 PASS; focused suite: 53 PASS; deployed-code GitHub CI: success. PRs #12/#13 merged.
+
+هر دو سرویس در ساعت ۱۴:۴۲ UTC روی نسخهٔ نهایی بالا آمدند و توقف موقت ساعت ۱۴:۴۳:۲۴ برداشته شد. ۹ کار معتبرِ وقفه فقط پس از کنترل نسخه، هش، متن فعلی و رکورد انتشارِ در انتظار به صف برگشتند و همه پردازش شدند؛ رکوردهای ارسال‌شده دوباره به صف برنگشتند. پاسخ نهایی سلامت ۲۰۰، شمار ریستارت‌ها صفر و تطبیق ۹۹ فایل سورس موفق بود. ۵۴۷ آزمون کامل، ۵۳ آزمون مرتبط و CI نسخهٔ مستقر موفق‌اند. درخواست‌های ۱۲ و ۱۳ ادغام شدند.
+
 ## Follow-up readability regression / تکمیل کنترل متن ناقص
 
 Inspection of a completed SEND job found a mixed-script entity (`کrg`) and a lead cut off at a single letter. Its publication was actually **SKIPPED / QUALITY_MATERIALITY_FLOOR**, with no remote ID; a completed outbox job is not proof of a public send. Add independent rejection of mixed Persian/Latin words, dangling connector/single-letter endings and ellipses in any content paragraph. Translation candidates/cache, publisher boundaries and QA use the same check. Proper separated acronyms such as KRG/PUK remain allowed.
