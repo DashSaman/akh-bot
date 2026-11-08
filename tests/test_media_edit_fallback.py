@@ -53,7 +53,7 @@ async def test_edit_message_text_success_no_fallback():
 
 
 @pytest.mark.asyncio
-async def test_edit_message_caption_truncates_without_dangling_markers():
+async def test_edit_message_never_truncates_long_caption():
     calls = []
 
     async def transport(request: httpx.Request) -> httpx.Response:
@@ -69,7 +69,6 @@ async def test_edit_message_caption_truncates_without_dangling_markers():
     pub = TelegramBotPublisher("t", "-100chat", transport=httpx.MockTransport(transport))
     long_text = "🔴 **" + "متن بلند " * 300 + "**\n\n🆔 @RastehNews"
     result = await pub.edit_message("79", long_text)
-    assert result["ok"] is True
-    cap = calls[-1]["caption"]
-    assert len(cap) <= 1024
-    assert cap.count("<b>") == cap.count("</b>")  # no dangling bold from truncation
+    assert result["ok"] is False
+    assert result["error"] == "BLOCKED_CAPTION_LENGTH"
+    assert len(calls) == 1  # existing photo is left intact; no partial caption edit
