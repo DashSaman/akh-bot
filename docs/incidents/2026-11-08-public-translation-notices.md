@@ -21,7 +21,13 @@ The live post-publication QA watcher used a separate old image. If a translation
 
 Before the fix, the exact production review notice passed both final checks and all four Telegram API methods; regression tests failed as expected. Failed-repair QA created an edit job. A concurrency reproduction advanced the story from version 1 to 5 during translation; old QA reset it to version 2 and queued an obsolete edit. These cases now pass, along with the real-news false-positive controls.
 
-پیش از اصلاح، اعلان واقعیِ محیط زنده از هر دو دروازه و هر چهار روش انتشار تلگرام عبور می‌کرد. شکست اصلاح ناظر نیز کار ویرایش می‌ساخت. در آزمون هم‌زمانی، نسخهٔ جدید ۵ به نسخهٔ قدیمی ۲ بازمی‌گشت. آزمون‌های این موارد و کنترل خبرهای سالم اکنون موفق‌اند. نتیجهٔ مجموعهٔ کامل Linux و استقرار پس از اجرا ثبت می‌شود.
+پیش از اصلاح، اعلان واقعیِ محیط زنده از هر دو دروازه و هر چهار روش انتشار تلگرام عبور می‌کرد. شکست اصلاح ناظر نیز کار ویرایش می‌ساخت. در آزمون هم‌زمانی، نسخهٔ جدید ۵ به نسخهٔ قدیمی ۲ بازمی‌گشت. آزمون‌های این موارد و کنترل خبرهای سالم اکنون موفق‌اند.
+
+## Deployment / استقرار
+
+At 2026-11-08 14:14 UTC both news services moved to `akhbot-app:quality-065843d`, revision `065843d889878d3494da1e22ad424627d62865d8`. The app was healthy, QA ran repeated passes, restart counts were zero, and the queue/failures-since-rollout were zero at the checkpoint. Three important module hashes matched between both containers. Runtime smoke used MockTransport and a temporary migrated database: four invalid-copy API paths blocked, valid copy allowed, and failed QA repair produced zero public jobs. It did not post a synthetic channel message. GitHub PR #12 CI passed; the backup passed SQLite quick_check and gzip verification, and old containers are retained for rollback.
+
+در ۸ نوامبر ۲۰۲۶ ساعت ۱۴:۱۴ UTC هر دو سرویس خبر روی نسخهٔ یکسان بالا آمدند. سرویس خبر سالم بود، ناظر چند دور اجرا شد، شمار ریستارت‌ها صفر و صف معوق/کار ناموفق پس از استقرار در نقطهٔ کنترل صفر بود. هش ماژول‌های اصلی در دو کانتینر یکسان شد. آزمون داخل نسخهٔ زنده با انتقال‌دهندهٔ شبکهٔ شبیه‌سازی‌شده و پایگاه موقت انجام شد و هیچ پیام آزمایشی عمومی نفرستاد. CI شمارهٔ ۱۲ سبز است؛ پشتیبان تازه بررسی شد و کانتینرهای قبلی برای بازگشت حفظ شدند.
 
 The complete isolated Linux run passed **533 tests** (24 existing deprecation warnings); 26 focused regressions passed locally. Latest-SENT payload reconstruction identified 13 historical suspect messages (8 review notices, 5 broadcast-only announcements); direct current Telegram contents were not inspected. No historical public message has been blindly deleted or replaced with an unvalidated draft. The correction does not claim automatic semantic understanding of every possible news item. Existing evidence, attribution, verification and language gates remain in force.
 
