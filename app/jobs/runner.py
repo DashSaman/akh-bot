@@ -126,6 +126,21 @@ def _policy_blocked(db: Database, settings: Settings, story_id: int,
     return None
 
 
+def _public_copy_blocked(db, story, platform, payload_hash, text, pubs) -> bool:
+    from app.newsroom.public_copy import unpublishable_copy_reason
+    reason = unpublishable_copy_reason(text) if str(text or "").strip() else "EMPTY_PUBLIC_COPY"
+    if not reason:
+        return False
+    # A duplicate execution must preserve the immutable record of an actual send.
+    if pubs.already_sent(story["id"], platform, payload_hash):
+        return True
+    pubs.mark(pubs.upsert(story["id"], platform, payload_hash, int(story["version"])),
+              "SKIPPED", error=f"QUALITY_{reason}")
+    from app.db.repo import EventsRepo
+    EventsRepo(db).set_quality_hold(story["event_id"], reason)
+    return True
+
+
 def _sent_in_current_chat(db, settings, story_id: int, platform: str) -> dict | None:
     current_chat = getattr(settings, "telegram_publish_target", "") if platform == "telegram" else ""
     prior = db.query_one(
@@ -155,6 +170,8 @@ def make_send_handler(db: Database, settings: Settings,
         if blocked:
             return True
         story = stories.get(story_id)
+        if _public_copy_blocked(db, story, platform, payload_hash, payload.get("text"), pubs):
+            return True
         if pubs.already_sent(story_id, platform, payload_hash):
             return True
         # THE invariant: never SEND a second post for an already-published story
@@ -300,6 +317,9 @@ def make_edit_handler(db: Database, settings: Settings,
             return True
         if blocked:
             return True
+        if _public_copy_blocked(db, stories.get(story_id), platform, payload_hash,
+                                payload.get("text"), pubs):
+            return True
         prior = _sent_in_current_chat(db, settings, story_id, platform)
         if prior is None:
             pubs.mark(pubs.upsert(story_id, platform, payload_hash,
@@ -346,6 +366,8 @@ def make_publish_handler(db: Database, settings: Settings,
             return True
         story = stories.get(story_id)
         if not story:
+            return True
+        if _public_copy_blocked(db, story, platform, payload_hash, payload.get("text"), pubs):
             return True
 
         # EXECUTION-TIME policy recheck: an old queued job must not bypass the

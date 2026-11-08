@@ -145,7 +145,7 @@ def _arabic_source_token_leaks(source: str, generated: str) -> list[str]:
     return sorted(
         t for t in shared
         if (t.startswith("\u0627\u0644") and len(t) >= 5)
-        or t in _ARABIC_NEWSROOM_TERMS
+        or t in _ARABIC_NEWSROOM_TERMS or t == "عشرات"
     )
 
 
@@ -294,6 +294,7 @@ async def translate_event(router, event_title: str, evidence_text: str,
     if router is None or not getattr(router, "available", False):
         return None
     from app.integrations.llm.base import wrap_untrusted
+    from app.newsroom.public_copy import unpublishable_copy_reason
 
     key = _cache_key(source_language, event_title, evidence_text)
     if db is not None:
@@ -306,7 +307,9 @@ async def translate_event(router, event_title: str, evidence_text: str,
                 if data.get("headline") and data.get("lead"):
                     from app.publishing.telegram_bot import is_persian_public_text
                     cached_copy = data["headline"] + " " + data["lead"]
-                    if not consistency_issues(evidence_text or "", cached_copy) and is_persian_public_text(cached_copy):
+                    if (not unpublishable_copy_reason(data["headline"], data["lead"])
+                            and not consistency_issues(evidence_text or "", cached_copy)
+                            and is_persian_public_text(cached_copy)):
                         data["cache"] = "HIT"
                         return data
                     log.warning("cached translation failed current quality gates; re-translating")
@@ -320,6 +323,8 @@ async def translate_event(router, event_title: str, evidence_text: str,
         headline = (candidate.get("headline") or "").strip()
         lead = (candidate.get("lead") or "").strip()
         if not headline or not lead:
+            return False
+        if unpublishable_copy_reason(headline, lead):
             return False
         if consistency_issues(evidence_text or "", headline + " " + lead):
             return False
@@ -339,6 +344,8 @@ async def translate_event(router, event_title: str, evidence_text: str,
     headline = (result.get("headline") or "").strip()
     lead = (result.get("lead") or "").strip()
     if not headline or not lead:
+        return None
+    if unpublishable_copy_reason(headline, lead):
         return None
     issues = consistency_issues(evidence_text or "", headline + " " + lead)
     if issues:

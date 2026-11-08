@@ -228,7 +228,9 @@ def translation_lost_entities(source_text: str, translated: str) -> list[str]:
         if n not in out:
             lost.append(f"num:{n}")
     for en, fa in _COUNTRY_MAP.items():
-        if en in src and fa not in out:
+        present = (bool(re.search(r"(?<![a-z])" + re.escape(en) + r"(?![a-z])", src))
+                   if en in {"us", "uk", "u.s.", "uae"} else en in src)
+        if present and fa not in out:
             lost.append(f"country:{fa}")
     return lost
 
@@ -290,6 +292,10 @@ def promotional_content(headline: str, body: str = "") -> bool:
 def publication_quality_gate(db, headline: str, body: str, weight: int,
                              event_id: int = 0) -> str | None:
     """Returns None (publish) or a HOLD reason. §1-§6, §9, §10."""
+    from app.newsroom.public_copy import unpublishable_copy_reason
+    reason = unpublishable_copy_reason(headline, body)
+    if reason:
+        return reason
     if promotional_content(headline, body):
         return "HOLD_PROMOTIONAL_CONTENT"
     if liveblog_boilerplate(headline, body):
