@@ -70,13 +70,14 @@ def select_headline(claims: list[dict]) -> str:
                 continue
             cand = extract_headline("", text) or text.split("\n", 1)[0].strip()
             if is_valid_headline(cand):
-                # A source-originated, unverified military/news report must
-                # remain explicitly attributed in the headline. The claim
-                # extractor separates media speaker labels into actor, so
-                # extract_headline() alone would silently turn "Channel 12
-                # reports X" into the unqualified statement "X".
+                # The structured extractor stores a source/speaker label
+                # separately from the proposition. Never discard that label:
+                # otherwise "Israel Broadcasting Corporation: the chief of
+                # staff of this country..." becomes an ambiguous unattributed
+                # assertion. Preserve explicit identities, not "breaking".
+                from app.newsroom.claim_model import _is_identity_label
                 actor = (c.get("actor") or "").strip().rstrip(":：")
-                if actor.startswith(("کانال ", "شبکه ", "خبرگزاری ")) and actor not in cand:
+                if actor and _is_identity_label(actor) and actor not in cand:
                     from app.verification.gates import fit_headline
                     return fit_headline(f"{actor}: {cand}")
                 return cand
@@ -88,7 +89,7 @@ def select_details(claims: list[dict], headline_claim_text: str | None,
     """Distinct meaningful claim bodies (speaker labels stripped), capped.
     Recency-aware: within a verification tier the NEWEST claim wins — a story
     must carry its latest state, and details never grow unbounded."""
-    seen_tokens: list[set[str]] = []
+    seen_texts: set[str] = set()
     details: list[str] = []
     for c in sorted(claims, key=lambda c: (_STATE_RANK.get(c.get("state") or "UNVERIFIED", 2),
                                            -(c.get("id") or 0),
@@ -96,7 +97,7 @@ def select_details(claims: list[dict], headline_claim_text: str | None,
         text = (c.get("text") or "").strip()
         if not text:
             continue
-        _, body = split_speaker_label(text)
+        speaker, body = split_speaker_label(text)
         body = (body or text).strip()
         for pref in _CONNECTIVE_PREFIX:
             if body.startswith(pref):
@@ -104,14 +105,21 @@ def select_details(claims: list[dict], headline_claim_text: str | None,
                 break
         if not body:
             continue
-        if headline_claim_text and normalize(body) == normalize(headline_claim_text):
+        from app.newsroom.claim_model import _is_identity_label
+        actor = (c.get("actor") or speaker or "").strip().rstrip(":：")
+        detail = (f"{actor}: {body}" if actor and _is_identity_label(actor)
+                  and actor not in body else body)
+        if headline_claim_text and normalize(detail) == normalize(headline_claim_text):
             continue
-        toks = {w for w in normalize(body).split() if len(w) > 2}
-        if any(len(toks & s) / max(1, len(toks | s)) >= 0.6 for s in seen_tokens):
-            continue  # restatement of an already-selected detail
-        if body and is_valid_headline(body) or len(body.split()) >= 5:
-            details.append(body)
-            seen_tokens.append(toks)
+        normalized = normalize(detail)
+        # Similar vocabulary is NOT proof of duplication: names, numbers,
+        # negation and timing can reverse the meaning of a report. Only a
+        # truly identical normalized claim may be silently removed.
+        if normalized in seen_texts:
+            continue
+        if detail and (is_valid_headline(detail) or len(detail.split()) >= 5):
+            details.append(detail)
+            seen_texts.add(normalized)
         if len(details) >= max_details:
             break
     return details
