@@ -66,6 +66,7 @@ VAGUE_ROLES = (
 )
 _PRONOUN_SUBJ = re.compile(
     r"^(?:او|وی|آنها|آن‌ها|این کشور|آن کشور)\b")
+_COUNTRY_REFERENCE = re.compile(r"(?:این|آن)\s+کشور\b")
 _ROLE_VERB = re.compile(
     r"(?:^|\s)(?:وزیر|رئیس|رئیس جمهور|رئیس‌جمهور|رئیس وزیران|نخست وزیر|"
     r"سفیر|نماینده|مقامات|فرمانده|دبیرکل|جانشین)\s*"
@@ -170,6 +171,14 @@ def context_incomplete(headline: str, body: str = "") -> bool:
     full = _norm(headline + " " + body)
     if not h:
         return True
+    # An identity mentioned only AFTER "this country" (often the target of
+    # an action, e.g. "against Iran") cannot identify whose military/leader
+    # the headline is about. Require an explicit preceding country anchor,
+    # not an unrelated source footer or a later-mentioned country.
+    for reference in _COUNTRY_REFERENCE.finditer(h):
+        prefix = h[:reference.start()]
+        if not any(country in prefix for country in COUNTRIES_FA):
+            return True
     if _PRONOUN_SUBJ.match(h) and not _has_anchor(full):
         return True
     if _ROLE_VERB.search(h):
