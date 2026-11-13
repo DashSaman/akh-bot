@@ -127,7 +127,7 @@ def split_speaker_label(text: str):
     global _SPEAKER_LINE_RE
     if _SPEAKER_LINE_RE is None:
         _SPEAKER_LINE_RE = _re.compile(
-            r"^[^\w\s]*[\U0001F1E6-\U0001F1FF]{0,2}\s*[\u0600-\u06FF\w .'\-]{2,40}\s*[:\uff1a]\s*$")
+            r"^[^\w\s]*[\U0001F1E6-\U0001F1FF]{0,2}\s*[\u0600-\u06FF\w .'\-]{2,100}\s*[:\uff1a]\s*$")
     lines = [ln.strip() for ln in (text or "").split(chr(10)) if ln.strip()]
     if not lines:
         return None, ""

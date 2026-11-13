@@ -57,14 +57,21 @@ def _norm_block(t: str) -> set:
 
 
 def dedup_paragraphs(text: str, threshold: float = 0.6) -> str:
-    """PUBLIC_TEXT_DUPLICATION_GATE: drop later paragraphs that restate earlier ones."""
+    """Remove exact repetitions only; similar claims can disagree materially.
+
+    The former Jaccard word-set gate silently dropped a later paragraph if
+    the same names/words appeared in a different order or with changed
+    numbers, negation, country or qualification. A news renderer must never
+    treat lexical similarity as semantic equivalence.
+    """
     lines = text.split(chr(10))
-    out, seen_sets = [], []
+    out, seen = [], set()
     for ln in lines:
-        toks = _norm_block(ln)
-        if len(toks) >= 6 and any(len(toks & p) / max(1, len(toks | p)) >= threshold for p in seen_sets):
+        norm = re.sub(r"\s+", " ", ln.replace("ي", "ی").replace("ك", "ک").replace("\u200c", " ")).strip()
+        if norm and norm in seen:
             continue
-        seen_sets.append(toks)
+        if norm:
+            seen.add(norm)
         out.append(ln)
     return chr(10).join(out)
 
