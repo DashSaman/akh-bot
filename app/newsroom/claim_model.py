@@ -175,7 +175,7 @@ def _is_identity_label(label: str) -> bool:
     return not any(lb.startswith(c.rstrip(":：").lower()) for c in _CONNECTIVE_STARTS)
 
 _LEADING_LABEL_RE = re.compile(
-    r"^([\u0600-\u06FF\w][\u0600-\u06FF\w .'\-]{1,38}?)\s*[:：]\s*(.*)$", re.S)
+    r"^([\u0600-\u06FF\w][\u0600-\u06FF\w .'\-]{1,98}?)\s*[:：]\s*(.*)$", re.S)
 
 
 def extract_structured(text: str, source_item_id: int,
@@ -196,6 +196,10 @@ def extract_structured(text: str, source_item_id: int,
         if m and _is_identity_label(m.group(1)) \
                 and (m.group(2).strip() or "\n" in body):
             speaker = m.group(1).strip()
+            body = m.group(2).strip()
+        elif m and m.group(1).strip().lower() in _EMPTY_LABELS:
+            # A "breaking"/"urgent" tag is neither a source nor part of
+            # the factual proposition; do not turn it into a headline.
             body = m.group(2).strip()
     cls = detect_class(body)
     nums = numbers_of(body)
